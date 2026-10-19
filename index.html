@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BTC Expected Move & IV Analytics</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- html2canvas สำหรับจับภาพหน้าจอเป็นรูปภาพ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Prompt', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center p-4">
+
+    <!-- Tailwind JIT Safelist (ซ่อนไว้เพื่อให้ CDN โหลดสีตารางให้ครบ) -->
+    <div class="hidden bg-amber-950/20 bg-slate-800/40 bg-emerald-950/20 text-rose-300 text-emerald-300"></div>
+
+    <!-- ครอบกล่องหลักด้วย ID captureArea เพื่อจับภาพเฉพาะการ์ดนี้ -->
+    <div id="captureArea" class="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 sm:p-8">
+        <div class="text-center mb-6">
+            <h1 class="text-2xl font-bold text-amber-400">BTC Expected Move & IV Metrics</h1>
+            <p class="text-slate-400 text-sm mt-1">ใช้ราคาเปิดประจำวันจาก Binance Futures และค่า DVOL จาก Deribit</p>
+            
+            <!-- วันที่และเวลาปัจจุบัน -->
+            <div class="inline-block mt-3 px-3 py-1 bg-slate-800/80 border border-slate-700/60 rounded-full text-xs text-amber-300 font-medium" id="currentDateDisplay">
+                📅 กำลังโหลดวันที่...
+            </div>
+
+            <!-- แถบแจ้งเตือนสถานะข้อมูล -->
+            <div id="statusBanner" class="mt-3 px-3 py-2 rounded-xl text-xs font-medium bg-sky-950/40 border border-sky-800/60 text-sky-300 flex items-center justify-center gap-2">
+                <span id="statusDot" class="w-2 h-2 rounded-full bg-sky-400 animate-pulse"></span>
+                <span id="statusText">กำลังเตรียมข้อมูลตลาด...</span>
+            </div>
+        </div>
+
+        <!-- กล่องแสดง IV Rank & IV Percentile (1 Year DVOL) -->
+        <div class="grid grid-cols-2 gap-3 mb-6">
+            <!-- IV Rank Card -->
+            <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4 text-center relative overflow-hidden flex flex-col justify-between">
+                <div>
+                    <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider">IV Rank (1Y)</h3>
+                    <div id="ivRankVal" class="text-2xl font-bold text-sky-400 my-2">--</div>
+                    <!-- หลอดแสดงเกจ Rank -->
+                    <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                        <div id="ivRankBar" class="bg-sky-400 h-full rounded-full transition-all duration-700" style="width: 0%"></div>
+                    </div>
+                </div>
+                <p class="text-[10px] text-slate-400 mt-2 leading-tight">
+                    ตำแหน่งของ IV ปัจจุบันเมื่อเทียบกับจุดต่ำสุด-สูงสุดในรอบ 1 ปี
+                </p>
+            </div>
+
+            <!-- IV Percentile Card -->
+            <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4 text-center relative overflow-hidden flex flex-col justify-between">
+                <div>
+                    <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider">IV Percentile (1Y)</h3>
+                    <div id="ivPctVal" class="text-2xl font-bold text-indigo-400 my-2">--</div>
+                    <!-- หลอดแสดงเกจ Percentile -->
+                    <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                        <div id="ivPctBar" class="bg-indigo-400 h-full rounded-full transition-all duration-700" style="width: 0%"></div>
+                    </div>
+                </div>
+                <p class="text-[10px] text-slate-400 mt-2 leading-tight">
+                    สัดส่วนจำนวนวันที่ DVOL ในรอบ 1 ปี ต่ำกว่าระดับปัจจุบัน
+                </p>
+            </div>
+        </div>
+
+        <!-- Input Form (เพิ่ม data-html2canvas-ignore เพื่อไม่ให้ติดไปในรูปภาพ) -->
+        <div data-html2canvas-ignore="true" class="space-y-4 mb-6 bg-slate-950/40 p-4 rounded-xl border border-slate-800">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">ราคาเปิดประจำวัน (Daily Open)</label>
+                    <input type="number" id="openPrice" step="any" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-400 transition" placeholder="ระบุราคาเปิด">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">ค่า DVOL ปัจจุบัน (%)</label>
+                    <input type="number" id="dvolValue" step="any" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-400 transition" placeholder="ระบุ DVOL">
+                </div>
+            </div>
+            <div class="flex gap-2 pt-1">
+                <button onclick="fetchMarketData()" class="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium py-2.5 rounded-lg transition border border-slate-700">
+                    🔄 ดึงข้อมูลใหม่
+                </button>
+                <button onclick="calculateMove()" class="w-1/2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs py-2.5 rounded-lg transition shadow-md shadow-amber-500/20">
+                    คำนวณใหม่
+                </button>
+            </div>
+        </div>
+
+        <!-- Result Section -->
+        <div id="resultSection" class="space-y-6 border-t border-slate-800 pt-6">
+            <div class="text-center">
+                <span class="text-xs text-slate-400 uppercase tracking-wider">ราคาเปิดประจำวัน (Center Price): </span>
+                <span id="displayCenterPrice" class="text-amber-400 font-bold text-lg">-</span>
+            </div>
+
+            <!-- 3 หลอด Progress Bar แยกตาม SD -->
+            <div class="space-y-4">
+                <!-- หลอดที่ 1: ±1.0 SD -->
+                <div class="bg-slate-800/40 border border-slate-800 rounded-xl p-3 space-y-1.5">
+                    <div class="flex justify-between text-xs font-semibold">
+                        <span id="label1SdLower" class="text-rose-400">-1.0 SD (-)</span>
+                        <span class="text-slate-300">กรอบตำแหน่งราคา ±1.0 SD (68.27%)</span>
+                        <span id="label1SdUpper" class="text-emerald-400">+1.0 SD (-)</span>
+                    </div>
+                    <div class="w-full bg-slate-800 h-3 rounded-full overflow-hidden relative border border-slate-700/50 flex">
+                        <div id="dot1sd" class="absolute top-0 bottom-0 w-2 bg-white rounded-full shadow-md z-10 -ml-1 transition-all duration-500" style="left: 50%;"></div>
+                        <div class="w-full bg-gradient-to-r from-rose-500 via-amber-400 to-emerald-500 h-full opacity-80"></div>
+                    </div>
+                    <div class="flex justify-between text-[10px] text-slate-400">
+                        <span id="pos1sd">ตำแหน่ง: 50.0%</span>
+                        <span class="text-amber-400">Normal Range</span>
+                    </div>
+                </div>
+
+                <!-- หลอดที่ 2: ±1.5 SD -->
+                <div class="bg-slate-800/40 border border-slate-800 rounded-xl p-3 space-y-1.5">
+                    <div class="flex justify-between text-xs font-semibold">
+                        <span id="label15SdLower" class="text-rose-400">-1.5 SD (-)</span>
+                        <span class="text-slate-300">กรอบตำแหน่งราคา ±1.5 SD (86.64%)</span>
+                        <span id="label15SdUpper" class="text-emerald-400">+1.5 SD (-)</span>
+                    </div>
+                    <div class="w-full bg-slate-800 h-3 rounded-full overflow-hidden relative border border-slate-700/50 flex">
+                        <div id="dot15sd" class="absolute top-0 bottom-0 w-2 bg-white rounded-full shadow-md z-10 -ml-1 transition-all duration-500" style="left: 50%;"></div>
+                        <div class="w-full bg-gradient-to-r from-rose-600 via-amber-500 to-emerald-600 h-full opacity-80"></div>
+                    </div>
+                    <div class="flex justify-between text-[10px] text-slate-400">
+                        <span id="pos15sd">ตำแหน่ง: 50.0%</span>
+                        <span class="text-amber-400">Wide Range</span>
+                    </div>
+                </div>
+
+                <!-- หลอดที่ 3: ±2.0 SD -->
+                <div class="bg-slate-800/40 border border-slate-800 rounded-xl p-3 space-y-1.5">
+                    <div class="flex justify-between text-xs font-semibold">
+                        <span id="label2SdLower" class="text-rose-500">-2.0 SD (-)</span>
+                        <span class="text-slate-300">กรอบตำแหน่งราคา ±2.0 SD (95.45%)</span>
+                        <span id="label2SdUpper" class="text-emerald-500">+2.0 SD (-)</span>
+                    </div>
+                    <div class="w-full bg-slate-800 h-3 rounded-full overflow-hidden relative border border-slate-700/50 flex">
+                        <div id="dot2sd" class="absolute top-0 bottom-0 w-2 bg-white rounded-full shadow-md z-10 -ml-1 transition-all duration-500" style="left: 50%;"></div>
+                        <div class="w-full bg-gradient-to-r from-rose-700 via-amber-500 to-emerald-700 h-full opacity-80"></div>
+                    </div>
+                    <div class="flex justify-between text-[10px] text-slate-400">
+                        <span id="pos2sd">ตำแหน่ง: 50.0%</span>
+                        <span class="text-amber-400">Extreme Range</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SD Table -->
+            <div class="overflow-x-auto rounded-xl border border-slate-800">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-800/80 text-slate-300 text-xs uppercase tracking-wider">
+                            <th class="p-3 text-center">ระดับ (SD)</th>
+                            <th class="p-3 text-right">แนวรับ (Lower)</th>
+                            <th class="p-3 text-center">% การวิ่ง</th>
+                            <th class="p-3 text-center">ความน่าจะเป็น</th>
+                            <th class="p-3 text-left">แนวต้าน (Upper)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sdTableBody" class="divide-y divide-slate-800/60 text-sm"></tbody>
+                </table>
+            </div>
+
+            <!-- กล่องคำอธิบายความหมายเปอร์เซ็นต์ -->
+            <div class="bg-slate-800/50 border border-slate-700/60 rounded-xl p-3 text-xs text-slate-300 space-y-1">
+                <div class="font-bold text-amber-400">💡 คำอธิบาย "ความน่าจะเป็น":</div>
+                <p>ไม่ใช่โอกาสที่ราคาจะวิ่งไปถึง แต่คือโอกาสที่ราคาจะแกว่งตัวอยู่ <strong>"ภายในกรอบราคานั้น"</strong> ตลอดทั้งวัน</p>
+                <p class="text-slate-400">* ยิ่งกรอบกว้างขึ้น (เช่น 2.0 SD) เปอร์เซ็นต์ความมั่นใจที่จะไม่ออกนอกกรอบจึงสูงขึ้นถึง 95.45% (โอกาสหลุดกรอบน้อยมาก)</p>
+            </div>
+
+            <!-- ปุ่มบันทึกเป็นรูปภาพ (PNG) -->
+            <div data-html2canvas-ignore="true" class="pt-2">
+                <button id="saveImgBtn" onclick="saveAsImage()" class="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-3 rounded-xl transition shadow-lg shadow-sky-600/20 flex items-center justify-center gap-2">
+                    🖼️ บันทึกเป็นรูปภาพ (Save as Image)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let latestDailyOpen = 81000;
+        let currentSpotForBar = 81000;
+        let defaultDvol = 55.0;
+        let historical1YDvol = [];
+
+        function displayCurrentDate() {
+            const now = new Date();
+            const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' };
+            const thaiDate = now.toLocaleDateString('th-TH', options);
+            const timeString = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            document.getElementById('currentDateDisplay').innerText = `📅 ข้อมูลประจำวัน: ${thaiDate} (${timeString} น.)`;
+        }
+
+        function updateStatus(type, message) {
+            const banner = document.getElementById('statusBanner');
+            const dot = document.getElementById('statusDot');
+            const text = document.getElementById('statusText');
+
+            text.innerText = message;
+
+            if (type === 'success') {
+                banner.className = "mt-3 px-3 py-2 rounded-xl text-xs font-medium bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 flex items-center justify-center gap-2";
+                dot.className = "w-2 h-2 rounded-full bg-emerald-400";
+            } else if (type === 'warning') {
+                banner.className = "mt-3 px-3 py-2 rounded-xl text-xs font-medium bg-amber-950/40 border border-amber-800/60 text-amber-300 flex items-center justify-center gap-2";
+                dot.className = "w-2 h-2 rounded-full bg-amber-400";
+            } else {
+                banner.className = "mt-3 px-3 py-2 rounded-xl text-xs font-medium bg-sky-950/40 border border-sky-800/60 text-sky-300 flex items-center justify-center gap-2";
+                dot.className = "w-2 h-2 rounded-full bg-sky-400 animate-pulse";
+            }
+        }
+
+        async function fetchWithTimeout(url, options = {}, timeout = 6000) {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), timeout);
+            try {
+                const response = await fetch(url, { ...options, signal: controller.signal });
+                clearTimeout(id);
+                return response;
+            } catch (error) {
+                clearTimeout(id);
+                throw error;
+            }
+        }
+
+        async function fetchMarketData() {
+            displayCurrentDate();
+            updateStatus('loading', 'กำลังเชื่อมต่อและดึงข้อมูลตลาด...');
+
+            let binanceSuccess = false;
+            let dvolSuccess = false;
+
+            // 1. ดึง Binance Open Price & Current Spot Price
+            try {
+                const res = await fetchWithTimeout('https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1d&limit=1', {}, 4000);
+                const data = await res.json();
+                if(data && data.length > 0) {
+                    latestDailyOpen = parseFloat(data[0][1]);
+                    document.getElementById('openPrice').value = latestDailyOpen.toFixed(2);
+                    binanceSuccess = true;
+                }
+
+                const priceRes = await fetchWithTimeout('https://fapi.binance.com/fapi/v1/ticker/price?symbol=BTCUSDT', {}, 3000);
+                const priceData = await priceRes.json();
+                if(priceData && priceData.price) {
+                    currentSpotForBar = parseFloat(priceData.price);
+                }
+            } catch (e) {
+                try {
+                    const proxyUrl = "https://api.allorigins.win/raw?url=" + encodeURIComponent('https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1d&limit=1');
+                    const proxyRes = await fetchWithTimeout(proxyUrl, {}, 4000);
+                    const proxyData = await proxyRes.json();
+                    if(proxyData && proxyData.length > 0) {
+                        latestDailyOpen = parseFloat(proxyData[0][1]);
+                        document.getElementById('openPrice').value = latestDailyOpen.toFixed(2);
+                        currentSpotForBar = latestDailyOpen;
+                        binanceSuccess = true;
+                    }
+                } catch (err) {
+                    console.warn("Binance fallback used");
+                }
+            }
+
+            if (!binanceSuccess) {
+                document.getElementById('openPrice').value = latestDailyOpen;
+            }
+
+            // 2. ดึงประวัติ DVOL ย้อนหลัง 1 ปี (แก้ไข Bug: ใช้ resolution=86400)
+            const now = Date.now();
+            const oneYearAgo = now - (365 * 24 * 60 * 60 * 1000);
+            const dvolApiUrl = `https://www.deribit.com/api/v2/public/get_volatility_index_data?currency=BTC&resolution=86400&start_timestamp=${oneYearAgo}&end_timestamp=${now}`;
+
+            try {
+                let dvolRes;
+                try {
+                    dvolRes = await fetchWithTimeout(dvolApiUrl, {}, 5000);
+                } catch (err) {
+                    const proxyDvolUrl = "https://api.allorigins.win/raw?url=" + encodeURIComponent(dvolApiUrl);
+                    dvolRes = await fetchWithTimeout(proxyDvolUrl, {}, 5000);
+                }
+
+                const dvolData = await dvolRes.json();
+                if (dvolData?.result?.data && dvolData.result.data.length > 0) {
+                    historical1YDvol = dvolData.result.data.map(item => parseFloat(item[4])).filter(v => !isNaN(v));
+                    const latestDvol = historical1YDvol[historical1YDvol.length - 1];
+                    document.getElementById('dvolValue').value = latestDvol.toFixed(2);
+                    dvolSuccess = true;
+                }
+            } catch (e) {
+                console.warn("Failed fetching 1Y DVOL data:", e);
+            }
+
+            if (!dvolSuccess) {
+                document.getElementById('dvolValue').value = defaultDvol;
+            }
+
+            if (binanceSuccess && dvolSuccess) {
+                updateStatus('success', '✅ เชื่อมต่อและดึงข้อมูลตลาดเรียลไทม์สำเร็จ');
+            } else {
+                updateStatus('warning', '⚠️ การเชื่อมต่อบางส่วนขัดข้อง ระบบใช้ค่าสำรองล่าสุด (สามารถพิมพ์แก้ไขเองได้)');
+            }
+
+            calculateMove();
+        }
+
+        function calculateIVRankAndPercentile(currentDvol) {
+            // กรณีดึงข้อมูลล้มเหลวหรือไม่พบประวัติ (แก้ไข Bug)
+            if (!historical1YDvol || historical1YDvol.length === 0) {
+                document.getElementById('ivRankVal').innerText = "N/A";
+                document.getElementById('ivPctVal').innerText = "N/A";
+                document.getElementById('ivRankBar').style.width = `0%`;
+                document.getElementById('ivPctBar').style.width = `0%`;
+                return;
+            }
+
+            const minDvol = Math.min(...historical1YDvol);
+            const maxDvol = Math.max(...historical1YDvol);
+
+            let ivRank = 0;
+            if (maxDvol > minDvol) {
+                ivRank = ((currentDvol - minDvol) / (maxDvol - minDvol)) * 100;
+            }
+            ivRank = Math.max(0, Math.min(100, ivRank));
+
+            const countLower = historical1YDvol.filter(d => d < currentDvol).length;
+            const ivPercentile = (countLower / historical1YDvol.length) * 100;
+
+            document.getElementById('ivRankVal').innerText = ivRank.toFixed(1);
+            document.getElementById('ivRankBar').style.width = `${ivRank}%`;
+
+            document.getElementById('ivPctVal').innerText = ivPercentile.toFixed(1);
+            document.getElementById('ivPctBar').style.width = `${ivPercentile}%`;
+        }
+
+        function calculateMove() {
+            let openPrice = parseFloat(document.getElementById('openPrice').value);
+            let dvol = parseFloat(document.getElementById('dvolValue').value);
+
+            if (isNaN(openPrice)) openPrice = latestDailyOpen;
+            if (isNaN(dvol)) dvol = defaultDvol;
+
+            calculateIVRankAndPercentile(dvol);
+
+            const currentPrice = currentSpotForBar > 0 ? currentSpotForBar : openPrice;
+            document.getElementById('displayCenterPrice').innerText = `$${openPrice.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
+            const dailyVolPct1SD = (dvol / 100) / Math.sqrt(365);
+            
+            const levels = [
+                { sd: "± 1.0 SD", mult: 1.0, prob: "68.27%", bg: "bg-amber-950/20" },
+                { sd: "± 1.5 SD", mult: 1.5, prob: "86.64%", bg: "bg-slate-800/40" },
+                { sd: "± 2.0 SD", mult: 2.0, prob: "95.45%", bg: "bg-emerald-950/20" }
+            ];
+
+            let tableHtml = "";
+            let bounds = {};
+
+            levels.forEach(lvl => {
+                const movePct = dailyVolPct1SD * lvl.mult;
+                const moveAmount = openPrice * movePct;
+                const lower = openPrice - moveAmount;
+                const upper = openPrice + moveAmount;
+
+                bounds[lvl.mult] = { lower, upper };
+
+                tableHtml += `
+                    <tr class="${lvl.bg} hover:bg-slate-800/60 transition">
+                        <td class="p-3 text-center font-bold text-amber-400">${lvl.sd}</td>
+                        <td class="p-3 text-right text-rose-300 font-medium">$${lower.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                        <td class="p-3 text-center text-amber-200/90 font-mono text-xs">± ${(movePct * 100).toFixed(2)}%</td>
+                        <td class="p-3 text-center text-slate-400 text-xs">${lvl.prob}</td>
+                        <td class="p-3 text-left text-emerald-300 font-medium">$${upper.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    </tr>
+                `;
+            });
+
+            document.getElementById('sdTableBody').innerHTML = tableHtml;
+
+            function updateBar(mult, dotId, lowLblId, uppLblId, posLblId) {
+                const low = bounds[mult].lower;
+                const upp = bounds[mult].upper;
+                const range = upp - low;
+                let pct = ((currentPrice - low) / range) * 100;
+                
+                let statusMsg = `${pct.toFixed(1)}%`;
+                if (pct < 0) statusMsg = `ต่ำกว่า -${mult}SD!`;
+                if (pct > 100) statusMsg = `ทะลุ +${mult}SD!`;
+
+                pct = Math.max(0, Math.min(100, pct));
+
+                document.getElementById(dotId).style.left = `${pct}%`;
+                document.getElementById(lowLblId).innerText = `-${mult}SD ($${low.toLocaleString('en-US', {maximumFractionDigits: 0})})`;
+                document.getElementById(uppLblId).innerText = `+${mult}SD ($${upp.toLocaleString('en-US', {maximumFractionDigits: 0})})`;
+                document.getElementById(posLblId).innerText = `ตำแหน่ง: ${statusMsg} (Spot: $${currentPrice.toLocaleString()})`;
+            }
+
+            updateBar(1.0, 'dot1sd', 'label1SdLower', 'label1SdUpper', 'pos1sd');
+            updateBar(1.5, 'dot15sd', 'label15SdLower', 'label15SdUpper', 'pos15sd');
+            updateBar(2.0, 'dot2sd', 'label2SdLower', 'label2SdUpper', 'pos2sd');
+
+            document.getElementById('resultSection').classList.remove('hidden');
+        }
+
+        // ฟังก์ชันแคปเจอร์หน้าจอและดาวน์โหลดเป็นภาพ PNG
+        async function saveAsImage() {
+            const btn = document.getElementById('saveImgBtn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '⏳ กำลังบันทึกรูปภาพ...';
+            btn.disabled = true;
+
+            try {
+                // แก้ไข Bug: เลื่อนจอกลับไปบนสุดเพื่อป้องกันภาพแหว่ง
+                window.scrollTo({ top: 0, behavior: 'instant' }); 
+                
+                const captureElement = document.getElementById('captureArea');
+                const canvas = await html2canvas(captureElement, {
+                    scale: 2, 
+                    backgroundColor: '#020617', 
+                    useCORS: true,
+                    scrollY: 0, // บังคับแกน Y ให้ไม่ถูกตัดเมื่อเลื่อนจอ
+                    logging: false
+                });
+
+                const link = document.createElement('a');
+                const now = new Date();
+                const dateStr = now.toISOString().slice(0, 10);
+                link.download = `BTC_Expected_Move_${dateStr}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            } catch (err) {
+                console.error("Capture failed:", err);
+                alert("ไม่สามารถบันทึกภาพได้ กรุณาลองใหม่อีกครั้ง");
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        window.onload = fetchMarketData;
+    </script>
+</body>
+</html>
