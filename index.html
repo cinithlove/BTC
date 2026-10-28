@@ -1,223 +1,876 @@
 <!DOCTYPE html>
-<html lang="th">
+<html lang="th" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BTC Expected Move & IV Analytics</title>
+    <title>BTC Expected Move, VIX & Pro Options Flow</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- html2canvas สำหรับจับภาพหน้าจอเป็นรูปภาพ -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js & Plugins -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Prompt', sans-serif; }
+        :root {
+            color-scheme: dark;
+        }
+        body {
+            font-family: 'Prompt', sans-serif;
+            background-color: #020617;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(245, 158, 11, 0.05) 0px, transparent 45%),
+                radial-gradient(at 100% 0%, rgba(56, 189, 248, 0.05) 0px, transparent 45%);
+            background-attachment: fixed;
+        }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        ::-webkit-scrollbar { height: 6px; width: 6px; }
+        ::-webkit-scrollbar-track { background: #090d16; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #334155; }
+
+        /* Fullscreen Mode - Responsive Flex Layout */
+        .chart-fullscreen {
+            position: fixed !important;
+            inset: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            z-index: 9999 !important;
+            background: #020617 !important;
+            padding: 20px 24px !important;
+            border-radius: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            overflow-y: auto !important;
+            margin: 0 !important;
+        }
+        .chart-fullscreen .chart-wrapper {
+            flex: 1 1 auto !important;
+            height: auto !important;
+            min-height: 360px !important;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+        select option {
+            background-color: #0f172a;
+            color: #e2e8f0;
+        }
+
+        .glass-card {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(30, 41, 59, 0.9);
+            box-shadow: 0 20px 45px -15px rgba(0, 0, 0, 0.6);
+        }
+
+        .sub-card {
+            background: rgba(2, 6, 23, 0.65);
+            border: 1px solid rgba(30, 41, 59, 0.85);
+        }
+
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button {
+            opacity: 1;
+        }
     </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center p-4">
+<body class="bg-slate-950 text-slate-100 min-h-screen p-3 sm:p-5 lg:p-7 antialiased selection:bg-amber-500 selection:text-slate-950">
 
-    <!-- Tailwind JIT Safelist (ซ่อนไว้เพื่อให้ CDN โหลดสีตารางให้ครบ) -->
-    <div class="hidden bg-amber-950/20 bg-slate-800/40 bg-emerald-950/20 text-rose-300 text-emerald-300"></div>
+    <!-- Pre-load dynamic Tailwind classes -->
+    <div class="hidden bg-sky-500/10 border-sky-500/20 border-sky-500/30 text-sky-400/70 text-sky-400 text-sky-300 bg-yellow-500/10 border-yellow-500/20 border-yellow-500/30 text-yellow-500/70 text-yellow-500 text-yellow-300 bg-rose-500/10 border-rose-500/20 border-rose-500/30 text-rose-400/70 text-rose-400 text-rose-300 bg-emerald-500/10 border-emerald-500/20 border-emerald-500/30 text-emerald-400 text-emerald-300 bg-purple-500/10 border-purple-500/30 text-purple-300"></div>
 
-    <!-- ครอบกล่องหลักด้วย ID captureArea เพื่อจับภาพเฉพาะการ์ดนี้ -->
-    <div id="captureArea" class="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 sm:p-8">
-        <div class="text-center mb-6">
-            <h1 class="text-2xl font-bold text-amber-400">BTC Expected Move & IV Metrics</h1>
-            <p class="text-slate-400 text-sm mt-1">ใช้ราคาเปิดประจำวันจาก Binance Futures และค่า DVOL จาก Deribit</p>
-            
-            <!-- วันที่และเวลาปัจจุบัน -->
-            <div class="inline-block mt-3 px-3 py-1 bg-slate-800/80 border border-slate-700/60 rounded-full text-xs text-amber-300 font-medium" id="currentDateDisplay">
-                📅 กำลังโหลดวันที่...
+    <div class="max-w-[1440px] mx-auto space-y-6">
+
+        <!-- ========================================== -->
+        <!-- HEADER: Title + Live Spot + VIX + Clock    -->
+        <!-- ========================================== -->
+        <header class="flex flex-col xl:flex-row items-start xl:items-center justify-between pb-4 border-b border-slate-800/80 gap-4">
+            <div class="flex items-center gap-3.5">
+                <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-slate-950 font-extrabold text-xl shadow-lg shadow-amber-500/20 shrink-0 font-mono">
+                    ₿
+                </div>
+                <div>
+                    <div class="flex items-center gap-2.5">
+                        <h1 class="text-xl sm:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-amber-300 via-amber-400 to-orange-400 bg-clip-text text-transparent">
+                            Market Intelligence Dashboard
+                        </h1>
+                        <span class="hidden sm:inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                            PRO QUANT v2.5
+                        </span>
+                    </div>
+                    <p class="text-slate-400 text-xs sm:text-sm mt-0.5">
+                        วิเคราะห์ความผันผวน BTC (Expected Move & DVOL), ความผันผวนตลาดโลก (CBOE VIX), S&P 500 Heatmap และ Deribit Options Flow / GEX
+                    </p>
+                </div>
             </div>
 
-            <!-- แถบแจ้งเตือนสถานะข้อมูล -->
-            <div id="statusBanner" class="mt-3 px-3 py-2 rounded-xl text-xs font-medium bg-sky-950/40 border border-sky-800/60 text-sky-300 flex items-center justify-center gap-2">
-                <span id="statusDot" class="w-2 h-2 rounded-full bg-sky-400 animate-pulse"></span>
-                <span id="statusText">กำลังเตรียมข้อมูลตลาด...</span>
+            <div class="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full xl:w-auto justify-start xl:justify-end">
+                <!-- Live BTC Spot Badge -->
+                <div class="flex items-center gap-3 px-3.5 py-2 glass-card rounded-xl">
+                    <div class="flex items-center gap-2">
+                        <span id="btcLiveDot" class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></span>
+                        <div class="flex flex-col">
+                            <span class="text-[10px] text-slate-400 font-semibold tracking-wider uppercase">BTC SPOT</span>
+                            <span id="headerBtcSpot" class="text-base font-bold font-mono text-amber-400">--</span>
+                        </div>
+                    </div>
+                    <div class="border-l border-slate-800 pl-3 flex flex-col">
+                        <span class="text-[9px] text-slate-400 font-medium">เทียบราคาเปิดวันนี้</span>
+                        <span id="headerBtcChange" class="text-[11px] font-bold font-mono text-slate-300">--</span>
+                    </div>
+                </div>
+
+                <!-- Live CBOE VIX Badge -->
+                <div class="flex items-center gap-3 px-3.5 py-2 glass-card rounded-xl">
+                    <div class="flex items-center gap-2">
+                        <span id="vixDot" class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                        <div class="flex flex-col">
+                            <span class="text-[10px] text-slate-400 font-semibold tracking-wider uppercase">CBOE VIX</span>
+                            <span id="vixValDisplay" class="text-base font-bold font-mono text-slate-100">--</span>
+                        </div>
+                    </div>
+                    <div class="border-l border-slate-800 pl-3 flex flex-col">
+                        <span class="text-[9px] text-slate-400 font-medium">สภาวะตลาด</span>
+                        <span id="vixRegimeDisplay" class="text-[11px] font-bold text-emerald-400">กำลังโหลด...</span>
+                    </div>
+                </div>
+
+                <!-- Live Thai Date & Clock -->
+                <div class="px-3.5 py-2.5 glass-card rounded-xl text-xs text-amber-300 font-medium font-mono flex items-center gap-1.5" id="currentDateDisplay">
+                    📅 กำลังโหลดวันที่...
+                </div>
+            </div>
+        </header>
+
+        <!-- ========================================== -->
+        <!-- SECTION 1: Expected Move (5) + Heatmap (7) -->
+        <!-- ========================================== -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+            <!-- Left Column: BTC Expected Move & IV Metrics -->
+            <div class="lg:col-span-5 flex">
+                <div id="captureArea" class="w-full glass-card rounded-2xl p-5 sm:p-6 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-start justify-between gap-2 mb-4">
+                            <div>
+                                <h2 class="text-xl sm:text-2xl font-bold text-amber-400">BTC Expected Move & IV Metrics</h2>
+                                <p class="text-slate-400 text-xs mt-0.5">ใช้ราคาเปิดประจำวัน (00:00 UTC) จาก Binance Futures และค่า DVOL จาก Deribit</p>
+                            </div>
+                            <button onclick="copySummaryLevels()" id="btnCopyLevels" title="คัดลอกระดับราคาสำคัญทั้งหมดไปยัง Clipboard" class="shrink-0 px-2.5 py-1.5 bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-medium transition flex items-center gap-1.5 shadow-sm">
+                                <span>📋</span>
+                                <span id="copyBtnText">คัดลอกราคา</span>
+                            </button>
+                        </div>
+
+                        <div id="statusBanner" class="mb-5 px-3 py-2 rounded-xl text-xs font-medium bg-sky-950/40 border border-sky-800/60 text-sky-300 flex items-center justify-center gap-2">
+                            <span id="statusDot" class="w-2 h-2 rounded-full bg-sky-400 animate-pulse"></span>
+                            <span id="statusText">กำลังเตรียมข้อมูลตลาด...</span>
+                        </div>
+
+                        <!-- IV Rank & IV Percentile Cards -->
+                        <div class="grid grid-cols-2 gap-3 mb-5">
+                            <div class="sub-card rounded-xl p-3.5 text-center relative overflow-hidden flex flex-col justify-between">
+                                <div>
+                                    <div class="flex items-center justify-between text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                                        <span>IV Rank (1Y)</span>
+                                        <span id="ivRankTag" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-400">--</span>
+                                    </div>
+                                    <div id="ivRankVal" class="text-2xl font-bold font-mono text-sky-400 my-1.5">--</div>
+                                    <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                                        <div id="ivRankBar" class="bg-sky-400 h-full rounded-full transition-all duration-700" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                                <p id="ivRankSub" class="text-[10px] text-slate-400 mt-2 leading-tight">ตำแหน่ง IV เทียบจุดต่ำ-สูง 1 ปี</p>
+                            </div>
+
+                            <div class="sub-card rounded-xl p-3.5 text-center relative overflow-hidden flex flex-col justify-between">
+                                <div>
+                                    <div class="flex items-center justify-between text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                                        <span>IV Percentile (1Y)</span>
+                                        <span id="ivPctTag" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400">--</span>
+                                    </div>
+                                    <div id="ivPctVal" class="text-2xl font-bold font-mono text-indigo-400 my-1.5">--</div>
+                                    <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                                        <div id="ivPctBar" class="bg-indigo-400 h-full rounded-full transition-all duration-700" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                                <p id="ivPctSub" class="text-[10px] text-slate-400 mt-2 leading-tight">สัดส่วนวันที่ DVOL ต่ำกว่าปัจจุบัน</p>
+                            </div>
+                        </div>
+
+                        <!-- Inputs & Action Buttons -->
+                        <div class="space-y-3.5 mb-5 sub-card p-4 rounded-xl">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                                <div>
+                                    <label for="openPrice" class="block text-xs font-medium text-slate-300 mb-1">ราคาเปิดประจำวัน (Daily Open)</label>
+                                    <input type="number" id="openPrice" step="any" oninput="calculateMove()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-amber-400 transition" placeholder="ระบุราคาเปิด">
+                                </div>
+                                <div>
+                                    <label for="dvolValue" class="block text-xs font-medium text-slate-300 mb-1">ค่า DVOL ปัจจุบัน (%)</label>
+                                    <input type="number" id="dvolValue" step="any" oninput="calculateMove()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-amber-400 transition" placeholder="ระบุ DVOL">
+                                </div>
+                            </div>
+                            <div class="flex gap-2.5 pt-0.5">
+                                <button onclick="fetchMarketData()" class="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium py-2.5 rounded-xl transition border border-slate-700 flex items-center justify-center gap-1.5">
+                                    <span>🔄</span> ดึงข้อมูลตลาดใหม่
+                                </button>
+                                <button onclick="calculateMove()" class="w-1/2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs py-2.5 rounded-xl transition shadow-md shadow-amber-500/20">
+                                    คำนวณกรอบราคา
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Results Section -->
+                        <div id="resultSection" class="space-y-4 border-t border-slate-800/80 pt-4">
+                            <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-900/70 border border-slate-800 px-3.5 py-2.5 rounded-xl">
+                                <div>
+                                    <span class="text-[11px] text-slate-400 uppercase tracking-wider block">Center (Daily Open)</span>
+                                    <span id="displayCenterPrice" class="text-amber-400 font-bold font-mono text-base">-</span>
+                                </div>
+                                <div class="text-center">
+                                    <span class="text-[11px] text-slate-400 uppercase tracking-wider block">Daily 1SD Move</span>
+                                    <span id="displayDaily1SdPct" class="text-sky-300 font-bold font-mono text-sm">-</span>
+                                </div>
+                                <div class="text-right">
+                                    <span class="text-[11px] text-slate-400 uppercase tracking-wider block">Spot ปัจจุบัน</span>
+                                    <span id="displayCurrentSpot" class="text-slate-100 font-bold font-mono text-base">-</span>
+                                </div>
+                            </div>
+
+                            <!-- SD Range Gauges -->
+                            <div class="space-y-3">
+                                <!-- 1.0 SD -->
+                                <div class="sub-card rounded-xl p-3 space-y-1.5">
+                                    <div class="flex justify-between text-xs font-semibold">
+                                        <span id="label1SdLower" class="text-rose-400 font-mono">-1.0 SD</span>
+                                        <span class="text-slate-300">กรอบ ±1.0 SD (68.27%)</span>
+                                        <span id="label1SdUpper" class="text-emerald-400 font-mono">+1.0 SD</span>
+                                    </div>
+                                    <div class="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden relative border border-slate-700/60 flex">
+                                        <div class="absolute left-1/2 top-0 bottom-0 w-0.5 bg-slate-200/40 z-0"></div>
+                                        <div id="dot1sd" class="absolute top-0 bottom-0 w-2.5 bg-white rounded-full shadow-[0_0_8px_#fff] z-10 -ml-1.25 transition-all duration-500" style="left: 50%;"></div>
+                                        <div class="w-full bg-gradient-to-r from-rose-500 via-amber-400 to-emerald-500 h-full opacity-80"></div>
+                                    </div>
+                                    <div class="flex justify-between text-[10px] text-slate-400">
+                                        <span id="pos1sd" class="font-mono">ตำแหน่ง: 50.0%</span>
+                                        <span class="text-amber-400 font-medium">Normal Range</span>
+                                    </div>
+                                </div>
+
+                                <!-- 1.5 SD -->
+                                <div class="sub-card rounded-xl p-3 space-y-1.5">
+                                    <div class="flex justify-between text-xs font-semibold">
+                                        <span id="label15SdLower" class="text-rose-400 font-mono">-1.5 SD</span>
+                                        <span class="text-slate-300">กรอบ ±1.5 SD (86.64%)</span>
+                                        <span id="label15SdUpper" class="text-emerald-400 font-mono">+1.5 SD</span>
+                                    </div>
+                                    <div class="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden relative border border-slate-700/60 flex">
+                                        <div class="absolute left-1/2 top-0 bottom-0 w-0.5 bg-slate-200/40 z-0"></div>
+                                        <div id="dot15sd" class="absolute top-0 bottom-0 w-2.5 bg-white rounded-full shadow-[0_0_8px_#fff] z-10 -ml-1.25 transition-all duration-500" style="left: 50%;"></div>
+                                        <div class="w-full bg-gradient-to-r from-rose-600 via-amber-500 to-emerald-600 h-full opacity-80"></div>
+                                    </div>
+                                    <div class="flex justify-between text-[10px] text-slate-400">
+                                        <span id="pos15sd" class="font-mono">ตำแหน่ง: 50.0%</span>
+                                        <span class="text-amber-400 font-medium">Wide Range</span>
+                                    </div>
+                                </div>
+
+                                <!-- 2.0 SD -->
+                                <div class="sub-card rounded-xl p-3 space-y-1.5">
+                                    <div class="flex justify-between text-xs font-semibold">
+                                        <span id="label2SdLower" class="text-rose-500 font-mono">-2.0 SD</span>
+                                        <span class="text-slate-300">กรอบ ±2.0 SD (95.45%)</span>
+                                        <span id="label2SdUpper" class="text-emerald-500 font-mono">+2.0 SD</span>
+                                    </div>
+                                    <div class="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden relative border border-slate-700/60 flex">
+                                        <div class="absolute left-1/2 top-0 bottom-0 w-0.5 bg-slate-200/40 z-0"></div>
+                                        <div id="dot2sd" class="absolute top-0 bottom-0 w-2.5 bg-white rounded-full shadow-[0_0_8px_#fff] z-10 -ml-1.25 transition-all duration-500" style="left: 50%;"></div>
+                                        <div class="w-full bg-gradient-to-r from-rose-700 via-amber-500 to-emerald-700 h-full opacity-80"></div>
+                                    </div>
+                                    <div class="flex justify-between text-[10px] text-slate-400">
+                                        <span id="pos2sd" class="font-mono">ตำแหน่ง: 50.0%</span>
+                                        <span class="text-amber-400 font-medium">Extreme Range</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- SD Table -->
+                            <div class="overflow-x-auto rounded-xl border border-slate-800">
+                                <table class="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr class="bg-slate-800/90 text-slate-300 text-[11px] uppercase tracking-wider">
+                                            <th class="py-2.5 px-3 text-center">ระดับ</th>
+                                            <th class="py-2.5 px-3 text-right">แนวรับ (Lower)</th>
+                                            <th class="py-2.5 px-2 text-center">% การวิ่ง</th>
+                                            <th class="py-2.5 px-2 text-center">โอกาส</th>
+                                            <th class="py-2.5 px-3 text-left">แนวต้าน (Upper)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="sdTableBody" class="divide-y divide-slate-800/70 text-xs sm:text-sm font-mono"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: S&P 500 Stock Heatmap -->
+            <div class="lg:col-span-7 flex flex-col">
+                <div class="glass-card rounded-2xl p-5 flex flex-col flex-1 h-full min-h-[760px]">
+                    <div class="flex items-center justify-between pb-3 border-b border-slate-800/80 mb-3">
+                        <div class="flex items-center gap-2.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                            <div>
+                                <h2 class="text-base sm:text-lg font-bold text-slate-100 leading-tight">S&P 500 Stock Heatmap</h2>
+                                <p class="text-[11px] text-slate-400">ภาพรวมเม็ดเงินไหลเข้า-ออกรายกลุ่มอุตสาหกรรมสหรัฐฯ (US Equities Correlation)</p>
+                            </div>
+                        </div>
+                        <span class="text-[11px] text-slate-300 bg-slate-800/90 px-2.5 py-1 rounded-lg border border-slate-700/70 font-mono">
+                            TradingView Live
+                        </span>
+                    </div>
+
+                    <div class="tradingview-widget-container flex-1 w-full rounded-xl overflow-hidden border border-slate-800/60 bg-slate-950">
+                        <div class="tradingview-widget-container__widget h-full w-full"></div>
+                        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js" async>
+                        {
+                          "exchanges": [],
+                          "dataSource": "SPX500",
+                          "grouping": "sector",
+                          "blockSize": "market_cap_calc",
+                          "blockColor": "change",
+                          "locale": "th_TH",
+                          "symbolUrl": "",
+                          "colorTheme": "dark",
+                          "hasTopBar": true,
+                          "isDataSetEnabled": true,
+                          "isZoomEnabled": true,
+                          "hasSymbolTooltip": true,
+                          "width": "100%",
+                          "height": "100%"
+                        }
+                        </script>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- กล่องแสดง IV Rank & IV Percentile (1 Year DVOL) -->
-        <div class="grid grid-cols-2 gap-3 mb-6">
-            <!-- IV Rank Card -->
-            <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4 text-center relative overflow-hidden flex flex-col justify-between">
+        <!-- ========================================== -->
+        <!-- SECTION 2: Deribit Options Market Profile  -->
+        <!-- ========================================== -->
+        <div class="glass-card rounded-2xl p-4 sm:p-6 space-y-5">
+
+            <!-- Section 2 Top Header & Filter Controls -->
+            <div class="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4 pb-4 border-b border-slate-800">
                 <div>
-                    <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider">IV Rank (1Y)</h3>
-                    <div id="ivRankVal" class="text-2xl font-bold text-sky-400 my-2">--</div>
-                    <!-- หลอดแสดงเกจ Rank -->
-                    <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                        <div id="ivRankBar" class="bg-sky-400 h-full rounded-full transition-all duration-700" style="width: 0%"></div>
+                    <div class="flex flex-wrap items-center gap-2.5">
+                        <div class="flex items-center gap-1.5 bg-amber-950/50 border border-amber-800/70 px-2.5 py-1 rounded-full text-xs text-amber-300 font-medium">
+                            <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                            <span>Deribit Options Feed</span>
+                        </div>
+                        <h2 class="text-lg sm:text-xl font-bold text-slate-100">BTC Options Market Profile & Order Flow</h2>
                     </div>
+                    <p class="text-slate-400 text-xs mt-1">การกระจายตัวของสัญญาคงค้าง (OI), ปริมาณซื้อขาย 24 ชม. (Volume), Gamma Exposure (GEX) และ Volatility Smile</p>
                 </div>
-                <p class="text-[10px] text-slate-400 mt-2 leading-tight">
-                    ตำแหน่งของ IV ปัจจุบันเมื่อเทียบกับจุดต่ำสุด-สูงสุดในรอบ 1 ปี
-                </p>
+
+                <div class="flex flex-wrap items-center gap-2 sm:gap-2.5 w-full xl:w-auto justify-between xl:justify-end">
+                    <div class="inline-flex rounded-xl bg-slate-950 p-1 border border-slate-800 text-xs">
+                        <button onclick="setExpiryFilter('0dte')" id="btn-0dte" class="px-2.5 py-1.5 rounded-lg font-bold transition bg-amber-500 text-slate-950 shadow-sm flex items-center gap-1.5">
+                            <span>0DTE</span>
+                            <span id="btn-0dte-sub" class="text-[10px] font-mono opacity-85"></span>
+                        </button>
+                        <button onclick="setExpiryFilter('weekly')" id="btn-weekly" class="px-2.5 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white">
+                            สัปดาห์นี้
+                        </button>
+                        <button onclick="setExpiryFilter('monthly')" id="btn-monthly" class="px-2.5 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white">
+                            เดือนนี้
+                        </button>
+                        <button onclick="setExpiryFilter('all')" id="btn-all" class="px-2.5 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white">
+                            ทั้งหมด
+                        </button>
+                    </div>
+
+                    <div class="relative">
+                        <select id="customExpirySelect" onchange="onCustomDateSelected(this.value)" class="bg-slate-950 border border-slate-700 text-amber-300 text-xs rounded-xl px-3 py-1.5 focus:outline-none focus:border-amber-400 cursor-pointer font-mono font-medium">
+                            <option value="">📅 เลือกวันหมดอายุ...</option>
+                        </select>
+                    </div>
+
+                    <span id="atmLabel" class="text-xs font-mono font-bold text-amber-300 bg-amber-950/40 border border-amber-800/60 px-3 py-1.5 rounded-lg">
+                        ATM: --
+                    </span>
+                    <span id="maxPainLabel" class="text-xs font-mono font-bold text-purple-300 bg-purple-950/50 border border-purple-800/70 px-3 py-1.5 rounded-lg shadow-sm">
+                        Max Pain: --
+                    </span>
+
+                    <div class="flex items-center gap-2 bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-xl text-xs">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        <span class="text-slate-400 text-[11px]">รีเฟรช:</span>
+                        <span id="autoRefreshCountdown" class="font-mono font-bold text-amber-400 text-xs w-6 text-right">60s</span>
+                    </div>
+
+                    <button onclick="manualRefreshOptions()" title="รีเฟรชข้อมูลเดี๋ยวนี้" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs text-slate-200 transition flex items-center gap-1 shadow-sm">
+                        🔄 รีเฟรช
+                    </button>
+                </div>
             </div>
 
-            <!-- IV Percentile Card -->
-            <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4 text-center relative overflow-hidden flex flex-col justify-between">
-                <div>
-                    <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider">IV Percentile (1Y)</h3>
-                    <div id="ivPctVal" class="text-2xl font-bold text-indigo-400 my-2">--</div>
-                    <!-- หลอดแสดงเกจ Percentile -->
-                    <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                        <div id="ivPctBar" class="bg-indigo-400 h-full rounded-full transition-all duration-700" style="width: 0%"></div>
+            <!-- Active Filter Status Bar -->
+            <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 px-1">
+                <div class="flex flex-wrap items-center gap-2">
+                    <span>กำลังแสดงผล:</span>
+                    <span id="activeExpiryNotice" class="font-bold text-amber-400">สัญญา 0DTE / ใกล้สุด</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-3">
+                    <span id="optionsCountNotice" class="text-[11px] text-slate-300 font-mono bg-slate-900 px-2.5 py-0.5 rounded-md border border-slate-800">-- สัญญา</span>
+                    <span class="text-[11px] text-slate-400 bg-slate-900/90 px-2.5 py-0.5 rounded-md border border-slate-800">💡 เลื่อนล้อเมาส์เพื่อซูม / คลิกค้างลากเพื่อเลื่อนกราฟ</span>
+                </div>
+            </div>
+
+            <!-- ========================================== -->
+            <!-- ROW 1: OI Focus & Volume Focus (24h)       -->
+            <!-- ========================================== -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <!-- OI Card -->
+                <div id="cardOi" class="sub-card rounded-xl p-4 flex flex-col justify-between transition-all duration-300">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                        <div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="text-sm sm:text-base font-bold text-slate-100">OI Focus (สัญญาคงค้าง)</span>
+                                <span id="oiPcrBadge" class="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md bg-slate-900 border border-slate-700 text-slate-300">PCR: --</span>
+                            </div>
+                            <div id="oiSummarySub" class="text-[11px] font-mono text-slate-400 mt-0.5">Call: -- BTC | Put: -- BTC</div>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <div class="hidden sm:flex items-center gap-2 text-xs mr-2">
+                                <span class="flex items-center gap-1 text-emerald-400 font-medium"><span class="w-2 h-2 rounded-sm bg-emerald-500 inline-block"></span> Call</span>
+                                <span class="flex items-center gap-1 text-rose-400 font-medium"><span class="w-2 h-2 rounded-sm bg-rose-500 inline-block"></span> Put</span>
+                                <span class="flex items-center gap-1 text-purple-400 font-medium"><span class="w-2 h-2 rounded-sm bg-purple-500 inline-block"></span> MaxPain</span>
+                            </div>
+                            <button onclick="zoomChart('oiChart', 1.25)" class="w-7 h-7 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 rounded-lg text-xs font-bold transition flex items-center justify-center" title="ซูมเข้า">➕</button>
+                            <button onclick="zoomChart('oiChart', 0.8)" class="w-7 h-7 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 rounded-lg text-xs font-bold transition flex items-center justify-center" title="ซูมออก">➖</button>
+                            <button onclick="resetChartZoom('oiChart')" class="px-2 h-7 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-400 rounded-lg text-[10px] font-mono transition flex items-center justify-center">Reset</button>
+                            <button onclick="toggleFullscreen('cardOi')" class="w-7 h-7 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 rounded-lg text-xs transition flex items-center justify-center ml-0.5" title="เต็มจอ (Esc เพื่อออก)">⤢</button>
+                        </div>
+                    </div>
+                    <div class="relative h-72 w-full chart-wrapper"><canvas id="oiChart"></canvas></div>
+                </div>
+
+                <!-- Volume Card -->
+                <div id="cardVol" class="sub-card rounded-xl p-4 flex flex-col justify-between transition-all duration-300">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                        <div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="text-sm sm:text-base font-bold text-slate-100">Volume Focus (24h)</span>
+                                <span id="volPcrBadge" class="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md bg-slate-900 border border-slate-700 text-slate-300">PCR: --</span>
+                            </div>
+                            <div id="volSummarySub" class="text-[11px] font-mono text-slate-400 mt-0.5">Call Vol: -- BTC | Put Vol: -- BTC</div>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <div class="hidden sm:flex items-center gap-2 text-xs mr-2">
+                                <span class="flex items-center gap-1 text-emerald-400 font-medium"><span class="w-2 h-2 rounded-sm bg-emerald-500 inline-block"></span> Call</span>
+                                <span class="flex items-center gap-1 text-rose-400 font-medium"><span class="w-2 h-2 rounded-sm bg-rose-500 inline-block"></span> Put</span>
+                                <span class="flex items-center gap-1 text-purple-400 font-medium"><span class="w-2 h-2 rounded-sm bg-purple-500 inline-block"></span> MaxPain</span>
+                            </div>
+                            <button onclick="zoomChart('volChart', 1.25)" class="w-7 h-7 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 rounded-lg text-xs font-bold transition flex items-center justify-center" title="ซูมเข้า">➕</button>
+                            <button onclick="zoomChart('volChart', 0.8)" class="w-7 h-7 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 rounded-lg text-xs font-bold transition flex items-center justify-center" title="ซูมออก">➖</button>
+                            <button onclick="resetChartZoom('volChart')" class="px-2 h-7 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-400 rounded-lg text-[10px] font-mono transition flex items-center justify-center">Reset</button>
+                            <button onclick="toggleFullscreen('cardVol')" class="w-7 h-7 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 rounded-lg text-xs transition flex items-center justify-center ml-0.5" title="เต็มจอ (Esc เพื่อออก)">⤢</button>
+                        </div>
+                    </div>
+                    <div class="relative h-72 w-full chart-wrapper"><canvas id="volChart"></canvas></div>
+                </div>
+            </div>
+
+            <!-- ========================================== -->
+            <!-- ROW 2: GEX Profile (Full Width)            -->
+            <!-- ========================================== -->
+            <div id="cardGex" class="sub-card rounded-xl p-4 sm:p-5 flex flex-col gap-4 transition-all duration-300">
+
+                <!-- Header + controls -->
+                <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+                    <div>
+                        <div class="flex flex-wrap items-center gap-2.5">
+                            <span class="text-base sm:text-lg font-bold text-slate-100">GEX Profile</span>
+                            <span class="text-xs bg-amber-950/50 text-amber-300 px-2.5 py-0.5 rounded-full border border-amber-800/70 font-medium">Black-76 Gamma Exposure</span>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-xs text-slate-400">
+                            <span>กำลังแสดงผล: <span id="gexNotice" class="font-bold text-amber-400"></span></span>
+                            <span class="flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                                อัปเดต: <span id="gexUpdated" class="text-slate-300 font-mono">--</span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2 sm:gap-2.5">
+                        <div class="inline-flex rounded-xl bg-slate-950 p-1 border border-slate-800 text-xs">
+                            <button onclick="setGexFilter('0dte')" id="gex-btn-0dte" class="px-2.5 py-1.5 rounded-lg font-bold transition bg-amber-500 text-slate-950 shadow-sm">0DTE</button>
+                            <button onclick="setGexFilter('weekly')" id="gex-btn-weekly" class="px-2.5 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white">สัปดาห์นี้</button>
+                            <button onclick="setGexFilter('monthly')" id="gex-btn-monthly" class="px-2.5 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white">เดือนนี้</button>
+                            <button onclick="setGexFilter('all')" id="gex-btn-all" class="px-2.5 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white">ทั้งหมด</button>
+                        </div>
+                        <select id="gexExpirySelect" onchange="onGexDateSelected(this.value)" class="bg-slate-950 border border-slate-700 text-amber-300 text-xs rounded-xl px-3 py-1.5 focus:outline-none focus:border-amber-400 cursor-pointer font-mono font-medium">
+                            <option value="">📅 เลือกวันที่หมดอายุ...</option>
+                        </select>
+                        <div class="inline-flex rounded-xl bg-slate-950 p-1 border border-slate-800 text-xs">
+                            <button onclick="setGexMode('net')" id="gex-mode-net" class="px-2.5 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white">Net</button>
+                            <button onclick="setGexMode('abs')" id="gex-mode-abs" class="px-2.5 py-1.5 rounded-lg font-bold transition bg-sky-500 text-slate-950 shadow-sm">Absolute</button>
+                        </div>
+                        <div class="flex items-center gap-1.5 border-l border-slate-800 pl-2.5">
+                            <button onclick="zoomChart('gexChart', 1.25)" class="w-7 h-7 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 rounded-lg text-xs font-bold transition flex items-center justify-center" title="ซูมเข้า">➕</button>
+                            <button onclick="zoomChart('gexChart', 0.8)" class="w-7 h-7 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 rounded-lg text-xs font-bold transition flex items-center justify-center" title="ซูมออก">➖</button>
+                            <button onclick="resetChartZoom('gexChart')" class="px-2 h-7 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-400 rounded-lg text-[10px] font-mono transition flex items-center justify-center">Reset</button>
+                            <button onclick="toggleFullscreen('cardGex')" class="w-7 h-7 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 rounded-lg text-xs transition flex items-center justify-center ml-0.5" title="เต็มจอ (Esc เพื่อออก)">⤢</button>
+                        </div>
                     </div>
                 </div>
-                <p class="text-[10px] text-slate-400 mt-2 leading-tight">
-                    สัดส่วนจำนวนวันที่ DVOL ในรอบ 1 ปี ต่ำกว่าระดับปัจจุบัน
-                </p>
+
+                <!-- Regime Banner -->
+                <div id="gexRegimeBanner" class="rounded-xl border border-slate-800 bg-slate-900/50 p-4 grid grid-cols-1 lg:grid-cols-12 gap-4 transition-colors duration-500">
+                    <div class="lg:col-span-3 flex items-start gap-3">
+                        <span id="gexRegimeDot" class="w-3 h-3 rounded-full bg-slate-500 shrink-0 mt-1.5"></span>
+                        <div>
+                            <div class="text-xs text-slate-400 font-medium">สภาวะ Dealer Gamma & การ Hedge</div>
+                            <div id="gexRegimeChip" class="text-xl font-bold text-slate-100 leading-tight mt-0.5">--</div>
+                            <div id="gexRegimeDesc" class="text-xs text-slate-300 mt-1.5 leading-relaxed">--</div>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-3 bg-slate-950/60 border border-slate-800 rounded-lg px-4 py-3 flex flex-col">
+                        <div class="text-xs text-slate-300 font-semibold pb-2 mb-2 border-b border-slate-800">แรง Hedge ของ MM ต่อ ±1%</div>
+                        <div id="gexHedgeFlow" class="space-y-2">--</div>
+                    </div>
+                    <div class="lg:col-span-3 bg-slate-950/60 border border-slate-800 rounded-lg px-4 py-3 flex flex-col">
+                        <div class="text-xs text-slate-300 font-semibold pb-2 mb-2 border-b border-slate-800">Spot เทียบจุดเปลี่ยน Gamma Flip</div>
+                        <div id="gexVsFlip" class="space-y-2">--</div>
+                    </div>
+                    <div class="lg:col-span-3 bg-slate-950/60 border border-slate-800 rounded-lg px-4 py-3 flex flex-col">
+                        <div class="text-xs text-slate-300 font-semibold pb-2 mb-2 border-b border-slate-800">กรอบกำแพง Put Wall – Call Wall</div>
+                        <div id="gexWallRange" class="space-y-2">--</div>
+                    </div>
+
+                    <div class="lg:col-span-12 bg-slate-950/60 border border-slate-800 rounded-lg px-4 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                        <div class="flex items-center gap-2 sm:w-56 shrink-0">
+                            <span class="text-xs text-slate-300 font-semibold">สัดส่วน Net ต่อ Absolute GEX</span>
+                        </div>
+                        <div class="flex-1 flex items-center gap-3">
+                            <span class="text-xs font-semibold text-rose-400 w-16 text-right">Negative</span>
+                            <div class="flex-1 h-2.5 rounded-full overflow-hidden relative border border-slate-700/60 bg-slate-800">
+                                <div class="absolute inset-0 bg-gradient-to-r from-rose-500 via-slate-600 to-emerald-500 opacity-75"></div>
+                                <div class="absolute left-1/2 top-0 bottom-0 w-0.5 bg-slate-200/50"></div>
+                                <div id="gexPressureDot" class="absolute top-0 bottom-0 w-3 -ml-1.5 bg-white rounded-full shadow-[0_0_8px_#fff] transition-all duration-500" style="left:50%"></div>
+                            </div>
+                            <span class="text-xs font-semibold text-emerald-400 w-16">Positive</span>
+                            <span id="gexPressurePct" class="text-sm font-bold font-mono text-slate-100 w-14 text-right">0%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5 Key GEX Level Tiles -->
+                <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+                    <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                            <span class="text-xs sm:text-sm text-slate-300 font-medium">Call Wall (แนวต้าน)</span>
+                        </div>
+                        <div id="gexCallWall" class="text-xl sm:text-2xl font-bold font-mono text-emerald-400 mt-2 leading-tight">--</div>
+                        <div id="gexCallWallSub" class="text-xs text-slate-400 font-mono mt-1">--</div>
+                    </div>
+                    <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-rose-400"></span>
+                            <span class="text-xs sm:text-sm text-slate-300 font-medium">Put Wall (แนวรับ)</span>
+                        </div>
+                        <div id="gexPutWall" class="text-xl sm:text-2xl font-bold font-mono text-rose-400 mt-2 leading-tight">--</div>
+                        <div id="gexPutWallSub" class="text-xs text-slate-400 font-mono mt-1">--</div>
+                    </div>
+                    <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
+                            <span class="text-xs sm:text-sm text-slate-300 font-medium">Gamma Flip (Zero GEX)</span>
+                        </div>
+                        <div id="gexFlip" class="text-xl sm:text-2xl font-bold font-mono text-sky-400 mt-2 leading-tight">--</div>
+                        <div id="gexFlipSub" class="text-xs text-slate-400 font-mono mt-1">--</div>
+                    </div>
+                    <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+                            <span class="text-xs sm:text-sm text-slate-300 font-medium">Net GEX (ต่อ 1%)</span>
+                        </div>
+                        <div id="gexNet" class="text-xl sm:text-2xl font-bold font-mono text-slate-100 mt-2 leading-tight">--</div>
+                        <div id="gexNetSub" class="text-xs text-slate-400 mt-1">--</div>
+                    </div>
+                    <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-4 col-span-2 md:col-span-1">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-purple-400"></span>
+                            <span class="text-xs sm:text-sm text-slate-300 font-medium">Absolute GEX</span>
+                        </div>
+                        <div id="gexAbs" class="text-xl sm:text-2xl font-bold font-mono text-purple-300 mt-2 leading-tight">--</div>
+                        <div id="gexAbsSub" class="text-xs text-slate-400 font-mono mt-1">--</div>
+                    </div>
+                </div>
+
+                <!-- GEX Canvas -->
+                <div class="relative h-[410px] w-full chart-wrapper">
+                    <canvas id="gexChart"></canvas>
+                </div>
+
+                <!-- Legend -->
+                <div class="flex flex-col items-center gap-2 bg-slate-900/40 py-3 px-4 rounded-xl border border-slate-800/70">
+                    <div class="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs font-medium">
+                        <span class="flex items-center gap-1.5 text-emerald-400"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-500"></span> Call GEX (+)</span>
+                        <span class="flex items-center gap-1.5 text-rose-400"><span class="w-2.5 h-2.5 rounded-sm bg-rose-500"></span> Put GEX (-)</span>
+                        <span class="flex items-center gap-1.5 text-slate-200"><span class="w-4 h-0.5 bg-white"></span> เส้น Net GEX</span>
+                        <span class="flex items-center gap-1.5 text-sky-300"><span class="w-4 border-t-2 border-dashed border-sky-400"></span> Gamma Flip</span>
+                        <span class="flex items-center gap-1.5 text-emerald-300"><span class="w-3 h-3 rounded-sm bg-emerald-500/20 border border-emerald-500/40"></span> Positive Gamma Zone</span>
+                        <span class="flex items-center gap-1.5 text-rose-300"><span class="w-3 h-3 rounded-sm bg-rose-500/20 border border-rose-500/40"></span> Negative Gamma Zone</span>
+                    </div>
+                    <div class="text-[11px] text-slate-400 text-center">
+                        คำนวณ Black-76 Gamma จาก Forward Price (`underlying_price`), `Mark IV` และ `Open Interest` รายสัญญา · หน่วย GEX = ล้านดอลลาร์ ($M) ต่อการขยับของราคา 1%
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========================================== -->
+            <!-- ROW 3: Volatility Smile (Pro Blend)        -->
+            <!-- ========================================== -->
+            <div id="cardSmile" class="sub-card rounded-xl p-4 sm:p-5 flex flex-col gap-4 transition-all duration-300 relative">
+
+                <!-- Header + controls -->
+                <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+                    <div>
+                        <div class="flex flex-wrap items-center gap-2.5">
+                            <span class="text-base sm:text-lg font-bold text-slate-100">Volatility Smile & Skew Structure</span>
+                            <span class="text-xs bg-sky-950/50 text-sky-300 px-2.5 py-0.5 rounded-full border border-sky-800/70 font-medium">OTM Blend + Interpolated Skew</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-1">โครงสร้าง Implied Volatility ราย Strike (OTM Put ฝั่งซ้าย · ATM ตรงกลาง · OTM Call ฝั่งขวา) พร้อมกรอบ Expected Move ตามอายุสัญญา</p>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+                        <div class="relative z-40">
+                            <select id="smileExpirySelect" onchange="updateSmileChart()" class="hidden"></select>
+
+                            <button id="customSmileBtn" type="button" onclick="toggleSmileMenu()" class="flex items-center justify-between gap-3 min-w-[210px] bg-slate-950 border border-slate-700 hover:border-sky-500/60 transition-all duration-200 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-sky-500 cursor-pointer">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs text-slate-400 whitespace-nowrap">หมดอายุ:</span>
+                                    <span id="customSmileDisplay" class="text-sky-400 text-xs font-bold font-mono">กำลังโหลด...</span>
+                                </div>
+                                <svg id="customSmileIcon" class="w-4 h-4 text-slate-400 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </button>
+
+                            <div id="customSmileMenu" class="absolute right-0 mt-2 w-full min-w-[220px] bg-[#0f172a]/95 backdrop-blur-md border border-slate-700 rounded-xl shadow-2xl opacity-0 invisible transform -translate-y-2 transition-all duration-200 overflow-hidden">
+                                <ul id="customSmileList" class="max-h-60 overflow-y-auto py-1 custom-scrollbar"></ul>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-2 bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-xl text-xs">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                            <span class="text-slate-400">รีเฟรช:</span>
+                            <span id="smileRefreshTimer" class="font-mono font-bold text-amber-400 w-7 text-right">60s</span>
+                        </div>
+
+                        <div class="flex items-center gap-1.5 border-l border-slate-800 pl-2.5">
+                            <button onclick="zoomChart('smileChart', 1.25)" class="w-7 h-7 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 rounded-lg text-xs font-bold transition flex items-center justify-center" title="ซูมเข้า">➕</button>
+                            <button onclick="zoomChart('smileChart', 0.8)" class="w-7 h-7 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 rounded-lg text-xs font-bold transition flex items-center justify-center" title="ซูมออก">➖</button>
+                            <button onclick="resetChartZoom('smileChart')" class="px-2 h-7 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-400 rounded-lg text-[10px] font-mono transition flex items-center justify-center" title="รีเซ็ต">Reset</button>
+                            <button onclick="toggleFullscreen('cardSmile')" class="w-7 h-7 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 rounded-lg text-xs transition flex items-center justify-center ml-0.5" title="เต็มจอ (Esc เพื่อออก)">⤢</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Summary Tiles -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+                            <span class="text-xs sm:text-sm text-slate-300 font-medium">ราคา Spot / Forward</span>
+                        </div>
+                        <div id="smileSpotPrice" class="text-xl sm:text-2xl font-bold font-mono text-slate-100 mt-2 leading-tight">$--</div>
+                        <div id="smileForwardSub" class="text-xs text-slate-400 font-mono mt-1">Forward: $--</div>
+                    </div>
+                    <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-4" title="Days to Expiration (08:00 UTC)">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
+                            <span class="text-xs sm:text-sm text-slate-300 font-medium">เวลาคงเหลือ (DTE)</span>
+                        </div>
+                        <div id="smileDte" class="text-xl sm:text-2xl font-bold font-mono text-sky-300 mt-2 leading-tight">--</div>
+                        <div id="smileDteSub" class="text-xs text-slate-400 mt-1">หมดอายุ 15:00 น. (เวลาไทย)</div>
+                    </div>
+                    <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                            <span class="text-xs sm:text-sm text-slate-300 font-medium">ATM IV</span>
+                        </div>
+                        <div id="smileAtmIv" class="text-xl sm:text-2xl font-bold font-mono text-amber-300 mt-2 leading-tight">--%</div>
+                        <div id="smileAtmMoveSub" class="text-xs text-slate-400 font-mono mt-1">±1SD Move: --</div>
+                    </div>
+                    <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+                        <div class="flex items-center justify-between gap-2">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-rose-400"></span>
+                                <span class="text-xs sm:text-sm text-slate-300 font-medium">Put-Call Skew</span>
+                            </div>
+                            <div class="relative flex items-center">
+                                <select id="skewSelect" onchange="updateSmileChart()" class="appearance-none bg-slate-950 border border-slate-700 rounded-lg text-xs text-slate-200 font-mono font-medium focus:outline-none focus:border-sky-500 cursor-pointer pl-2 pr-6 py-0.5">
+                                    <option value="5">±5%</option>
+                                    <option value="10" selected>±10%</option>
+                                    <option value="15">±15%</option>
+                                    <option value="20">±20%</option>
+                                    <option value="25">±25%</option>
+                                </select>
+                                <svg class="w-3 h-3 text-slate-400 absolute right-1.5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </div>
+                        </div>
+                        <div id="smileSkew" class="text-xl sm:text-2xl font-bold font-mono text-slate-100 mt-2 leading-tight">--</div>
+                        <div id="smileSkewSub" class="text-xs text-slate-400 mt-1">IV Put − IV Call (Interpolated)</div>
+                    </div>
+                </div>
+
+                <!-- SD Targets Bar for Selected Expiry -->
+                <div id="smileSdBoundsContainer" class="hidden rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3 flex-col lg:flex-row lg:items-center gap-3 lg:gap-4">
+                    <div class="flex items-center justify-between lg:justify-start gap-3 lg:w-64 shrink-0">
+                        <span class="text-xs sm:text-sm text-slate-200 font-semibold">กรอบราคาตามอายุสัญญานี้</span>
+                        <div class="flex items-center gap-1.5 text-xs text-slate-400">
+                            <span>แสดง:</span>
+                            <div class="relative flex items-center">
+                                <select id="sdSelect" onchange="updateSmileChart()" class="appearance-none bg-slate-950 border border-slate-700 rounded-lg text-xs text-sky-300 font-medium focus:outline-none focus:border-sky-500 cursor-pointer pl-2 pr-6 py-0.5">
+                                    <option value="ALL" selected>ทั้งหมด</option>
+                                    <option value="1.0">±1.0 SD</option>
+                                    <option value="1.5">±1.5 SD</option>
+                                    <option value="2.0">±2.0 SD</option>
+                                    <option value="0">ปิด</option>
+                                </select>
+                                <svg class="w-3 h-3 text-sky-400 absolute right-1.5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="smileSdBoundsList" class="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3"></div>
+                </div>
+
+                <!-- Smile Canvas -->
+                <div class="relative h-[420px] w-full chart-wrapper">
+                    <canvas id="smileChart"></canvas>
+                </div>
+
+                <!-- Smile Legend -->
+                <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-slate-400 bg-slate-900/40 py-2.5 px-4 rounded-xl border border-slate-800/70">
+                    <span class="flex items-center gap-1.5 text-rose-400 font-medium"><span class="w-2.5 h-2.5 rounded-full bg-rose-400"></span> OTM Put (Strike &lt; Forward)</span>
+                    <span class="flex items-center gap-1.5 text-amber-300 font-medium"><span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span> ATM (Near Forward)</span>
+                    <span class="flex items-center gap-1.5 text-sky-400 font-medium"><span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span> OTM Call (Strike &gt; Forward)</span>
+                </div>
             </div>
         </div>
 
-        <!-- Input Form (เพิ่ม data-html2canvas-ignore เพื่อไม่ให้ติดไปในรูปภาพ) -->
-        <div data-html2canvas-ignore="true" class="space-y-4 mb-6 bg-slate-950/40 p-4 rounded-xl border border-slate-800">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-xs font-medium text-slate-400 mb-1">ราคาเปิดประจำวัน (Daily Open)</label>
-                    <input type="number" id="openPrice" step="any" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-400 transition" placeholder="ระบุราคาเปิด">
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">ค่า DVOL ปัจจุบัน (%)</label>
-                    <input type="number" id="dvolValue" step="any" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-400 transition" placeholder="ระบุ DVOL">
-                </div>
-            </div>
-            <div class="flex gap-2 pt-1">
-                <button onclick="fetchMarketData()" class="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium py-2.5 rounded-lg transition border border-slate-700">
-                    🔄 ดึงข้อมูลใหม่
-                </button>
-                <button onclick="calculateMove()" class="w-1/2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs py-2.5 rounded-lg transition shadow-md shadow-amber-500/20">
-                    คำนวณใหม่
-                </button>
-            </div>
-        </div>
-
-        <!-- Result Section -->
-        <div id="resultSection" class="space-y-6 border-t border-slate-800 pt-6">
-            <div class="text-center">
-                <span class="text-xs text-slate-400 uppercase tracking-wider">ราคาเปิดประจำวัน (Center Price): </span>
-                <span id="displayCenterPrice" class="text-amber-400 font-bold text-lg">-</span>
-            </div>
-
-            <!-- 3 หลอด Progress Bar แยกตาม SD -->
-            <div class="space-y-4">
-                <!-- หลอดที่ 1: ±1.0 SD -->
-                <div class="bg-slate-800/40 border border-slate-800 rounded-xl p-3 space-y-1.5">
-                    <div class="flex justify-between text-xs font-semibold">
-                        <span id="label1SdLower" class="text-rose-400">-1.0 SD (-)</span>
-                        <span class="text-slate-300">กรอบตำแหน่งราคา ±1.0 SD (68.27%)</span>
-                        <span id="label1SdUpper" class="text-emerald-400">+1.0 SD (-)</span>
-                    </div>
-                    <div class="w-full bg-slate-800 h-3 rounded-full overflow-hidden relative border border-slate-700/50 flex">
-                        <div id="dot1sd" class="absolute top-0 bottom-0 w-2 bg-white rounded-full shadow-md z-10 -ml-1 transition-all duration-500" style="left: 50%;"></div>
-                        <div class="w-full bg-gradient-to-r from-rose-500 via-amber-400 to-emerald-500 h-full opacity-80"></div>
-                    </div>
-                    <div class="flex justify-between text-[10px] text-slate-400">
-                        <span id="pos1sd">ตำแหน่ง: 50.0%</span>
-                        <span class="text-amber-400">Normal Range</span>
-                    </div>
-                </div>
-
-                <!-- หลอดที่ 2: ±1.5 SD -->
-                <div class="bg-slate-800/40 border border-slate-800 rounded-xl p-3 space-y-1.5">
-                    <div class="flex justify-between text-xs font-semibold">
-                        <span id="label15SdLower" class="text-rose-400">-1.5 SD (-)</span>
-                        <span class="text-slate-300">กรอบตำแหน่งราคา ±1.5 SD (86.64%)</span>
-                        <span id="label15SdUpper" class="text-emerald-400">+1.5 SD (-)</span>
-                    </div>
-                    <div class="w-full bg-slate-800 h-3 rounded-full overflow-hidden relative border border-slate-700/50 flex">
-                        <div id="dot15sd" class="absolute top-0 bottom-0 w-2 bg-white rounded-full shadow-md z-10 -ml-1 transition-all duration-500" style="left: 50%;"></div>
-                        <div class="w-full bg-gradient-to-r from-rose-600 via-amber-500 to-emerald-600 h-full opacity-80"></div>
-                    </div>
-                    <div class="flex justify-between text-[10px] text-slate-400">
-                        <span id="pos15sd">ตำแหน่ง: 50.0%</span>
-                        <span class="text-amber-400">Wide Range</span>
-                    </div>
-                </div>
-
-                <!-- หลอดที่ 3: ±2.0 SD -->
-                <div class="bg-slate-800/40 border border-slate-800 rounded-xl p-3 space-y-1.5">
-                    <div class="flex justify-between text-xs font-semibold">
-                        <span id="label2SdLower" class="text-rose-500">-2.0 SD (-)</span>
-                        <span class="text-slate-300">กรอบตำแหน่งราคา ±2.0 SD (95.45%)</span>
-                        <span id="label2SdUpper" class="text-emerald-500">+2.0 SD (-)</span>
-                    </div>
-                    <div class="w-full bg-slate-800 h-3 rounded-full overflow-hidden relative border border-slate-700/50 flex">
-                        <div id="dot2sd" class="absolute top-0 bottom-0 w-2 bg-white rounded-full shadow-md z-10 -ml-1 transition-all duration-500" style="left: 50%;"></div>
-                        <div class="w-full bg-gradient-to-r from-rose-700 via-amber-500 to-emerald-700 h-full opacity-80"></div>
-                    </div>
-                    <div class="flex justify-between text-[10px] text-slate-400">
-                        <span id="pos2sd">ตำแหน่ง: 50.0%</span>
-                        <span class="text-amber-400">Extreme Range</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- SD Table -->
-            <div class="overflow-x-auto rounded-xl border border-slate-800">
-                <table class="w-full text-left border-collapse">
-                    <thead>
-                        <tr class="bg-slate-800/80 text-slate-300 text-xs uppercase tracking-wider">
-                            <th class="p-3 text-center">ระดับ (SD)</th>
-                            <th class="p-3 text-right">แนวรับ (Lower)</th>
-                            <th class="p-3 text-center">% การวิ่ง</th>
-                            <th class="p-3 text-center">ความน่าจะเป็น</th>
-                            <th class="p-3 text-left">แนวต้าน (Upper)</th>
-                        </tr>
-                    </thead>
-                    <tbody id="sdTableBody" class="divide-y divide-slate-800/60 text-sm"></tbody>
-                </table>
-            </div>
-
-            <!-- กล่องคำอธิบายความหมายเปอร์เซ็นต์ -->
-            <div class="bg-slate-800/50 border border-slate-700/60 rounded-xl p-3 text-xs text-slate-300 space-y-1">
-                <div class="font-bold text-amber-400">💡 คำอธิบาย "ความน่าจะเป็น":</div>
-                <p>ไม่ใช่โอกาสที่ราคาจะวิ่งไปถึง แต่คือโอกาสที่ราคาจะแกว่งตัวอยู่ <strong>"ภายในกรอบราคานั้น"</strong> ตลอดทั้งวัน</p>
-                <p class="text-slate-400">* ยิ่งกรอบกว้างขึ้น (เช่น 2.0 SD) เปอร์เซ็นต์ความมั่นใจที่จะไม่ออกนอกกรอบจึงสูงขึ้นถึง 95.45% (โอกาสหลุดกรอบน้อยมาก)</p>
-            </div>
-
-            <!-- ปุ่มบันทึกเป็นรูปภาพ (PNG) -->
-            <div data-html2canvas-ignore="true" class="pt-2">
-                <button id="saveImgBtn" onclick="saveAsImage()" class="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-3 rounded-xl transition shadow-lg shadow-sky-600/20 flex items-center justify-center gap-2">
-                    🖼️ บันทึกเป็นรูปภาพ (Save as Image)
-                </button>
-            </div>
-        </div>
     </div>
 
+    <!-- ========================================== -->
+    <!-- APPLICATION LOGIC                          -->
+    <!-- ========================================== -->
     <script>
-        let latestDailyOpen = 81000;
-        let currentSpotForBar = 81000;
-        let defaultDvol = 55.0;
+        // --- Global State ---
+        let latestDailyOpen = 0;
+        let currentSpotForBar = 0;
         let historical1YDvol = [];
 
+        let rawDeribitOptions = [];
+        let availableExpiries = [];
+        let currentExpiryFilter = '0dte';
+
+        let oiChartInstance = null;
+        let volChartInstance = null;
+        let gexChartInstance = null;
+        let smileChartInstance = null;
+
+        let deribitSpot = null;
+        let binanceSpotOk = false;
+        let isFetchingOptions = false;
+
+        // Cached summary values for quick clipboard copy
+        let latestSummaryCache = {
+            spot: 0,
+            open: 0,
+            dvol: 0,
+            sdBounds: {},
+            maxPain: null,
+            callWall: null,
+            putWall: null,
+            gammaFlip: null,
+            netGex: 0
+        };
+
+        // --- Utility: Active Spot Price ---
+        function getSpotPrice() {
+            if (deribitSpot && deribitSpot > 0) return deribitSpot;
+            if (currentSpotForBar && currentSpotForBar > 0) return currentSpotForBar;
+            const openInput = parseFloat(document.getElementById('openPrice')?.value);
+            return openInput > 0 ? openInput : 0;
+        }
+
+        function setText(id, txt) {
+            const el = document.getElementById(id);
+            if (el) el.innerText = txt;
+        }
+
+        function setHtml(id, html) {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = html;
+        }
+
+        // --- Header Clock & Live BTC Header Badge ---
         function displayCurrentDate() {
             const now = new Date();
-            const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' };
+            const options = { year: 'numeric', month: 'short', day: 'numeric', weekday: 'short' };
             const thaiDate = now.toLocaleDateString('th-TH', options);
             const timeString = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            document.getElementById('currentDateDisplay').innerText = `📅 ข้อมูลประจำวัน: ${thaiDate} (${timeString} น.)`;
+            setText('currentDateDisplay', `📅 ${thaiDate} · ${timeString} น.`);
+        }
+
+        function updateHeaderSpotBadge() {
+            const spot = currentSpotForBar > 0 ? currentSpotForBar : (deribitSpot || 0);
+            const open = parseFloat(document.getElementById('openPrice')?.value) || latestDailyOpen;
+            const spotEl = document.getElementById('headerBtcSpot');
+            const chgEl = document.getElementById('headerBtcChange');
+            if (!spotEl || !chgEl) return;
+
+            if (spot > 0) {
+                spotEl.innerText = `$${spot.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
+                if (open > 0) {
+                    const diff = spot - open;
+                    const pct = (diff / open) * 100;
+                    const sign = diff >= 0 ? '+' : '';
+                    chgEl.innerText = `${sign}${pct.toFixed(2)}% (${sign}$${Math.round(diff).toLocaleString()})`;
+                    chgEl.className = `text-[11px] font-bold font-mono ${diff >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+                } else {
+                    chgEl.innerText = 'รอราคาเปิด...';
+                    chgEl.className = 'text-[11px] font-bold font-mono text-slate-400';
+                }
+            }
         }
 
         function updateStatus(type, message) {
             const banner = document.getElementById('statusBanner');
             const dot = document.getElementById('statusDot');
             const text = document.getElementById('statusText');
-
+            if (!banner || !dot || !text) return;
             text.innerText = message;
-
             if (type === 'success') {
-                banner.className = "mt-3 px-3 py-2 rounded-xl text-xs font-medium bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 flex items-center justify-center gap-2";
+                banner.className = "mb-5 px-3 py-2 rounded-xl text-xs font-medium bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 flex items-center justify-center gap-2";
                 dot.className = "w-2 h-2 rounded-full bg-emerald-400";
             } else if (type === 'warning') {
-                banner.className = "mt-3 px-3 py-2 rounded-xl text-xs font-medium bg-amber-950/40 border border-amber-800/60 text-amber-300 flex items-center justify-center gap-2";
+                banner.className = "mb-5 px-3 py-2 rounded-xl text-xs font-medium bg-amber-950/40 border border-amber-800/60 text-amber-300 flex items-center justify-center gap-2";
                 dot.className = "w-2 h-2 rounded-full bg-amber-400";
             } else {
-                banner.className = "mt-3 px-3 py-2 rounded-xl text-xs font-medium bg-sky-950/40 border border-sky-800/60 text-sky-300 flex items-center justify-center gap-2";
+                banner.className = "mb-5 px-3 py-2 rounded-xl text-xs font-medium bg-sky-950/40 border border-sky-800/60 text-sky-300 flex items-center justify-center gap-2";
                 dot.className = "w-2 h-2 rounded-full bg-sky-400 animate-pulse";
             }
         }
 
-        async function fetchWithTimeout(url, options = {}, timeout = 6000) {
+        // --- Network Helpers with Timeout & Proxy Fallback ---
+        async function fetchWithTimeout(url, options = {}, timeout = 6500) {
             const controller = new AbortController();
             const id = setTimeout(() => controller.abort(), timeout);
             try {
@@ -230,220 +883,1930 @@
             }
         }
 
+        async function fetchJsonWithProxy(url, timeout = 8000, useProxy = true) {
+            try {
+                const res = await fetchWithTimeout(url, {}, timeout);
+                if (res.ok) return await res.json();
+            } catch (e) { /* direct failed, try proxy */ }
+            if (!useProxy) return null;
+            const proxies = [
+                u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+                u => `https://corsproxy.io/?${encodeURIComponent(u)}`
+            ];
+            for (const wrap of proxies) {
+                try {
+                    const res = await fetchWithTimeout(wrap(url), {}, timeout);
+                    if (res.ok) return await res.json();
+                } catch (e) { /* try next */ }
+            }
+            return null;
+        }
+
+        // Preserve user zoom state across 60s auto-refreshes when strike axis matches
+        function makeChartKeep(ctx, config, oldChart, key) {
+            let saved = null;
+            if (oldChart) {
+                try {
+                    if (oldChart.$zoomKey === key && oldChart.isZoomedOrPanned && oldChart.isZoomedOrPanned()) {
+                        saved = { min: oldChart.scales.x.min, max: oldChart.scales.x.max };
+                    }
+                } catch (e) { saved = null; }
+                oldChart.destroy();
+            }
+            const chart = new Chart(ctx, config);
+            chart.$zoomKey = key;
+            if (saved) {
+                try { chart.zoomScale('x', { min: saved.min, max: saved.max }, 'none'); } catch (e) {}
+            }
+            return chart;
+        }
+
+        // ==========================================
+        // CBOE VIX LIVE FETCHER (Multi-Route Race)
+        // ==========================================
+        let lastVixValue = null;
+        let lastVixRoute = null;
+        let lastVixSource = '';
+
+        async function fetchVixData() {
+            const valEl = document.getElementById('vixValDisplay');
+            const regimeEl = document.getElementById('vixRegimeDisplay');
+            const dotEl = document.getElementById('vixDot');
+
+            const sources = [
+                {
+                    name: 'CBOE',
+                    url: 'https://cdn.cboe.com/api/global/delayed_quotes/quotes/_VIX.json',
+                    parse: t => {
+                        const m = t.match(/"current_price"\s*:\s*([\d.]+)/) || t.match(/"last_trade_price"\s*:\s*([\d.]+)/) || t.match(/"close"\s*:\s*([\d.]+)/);
+                        return m ? parseFloat(m[1]) : NaN;
+                    }
+                },
+                {
+                    name: 'Yahoo',
+                    url: 'https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?interval=1d&range=1d',
+                    parse: t => parseFloat((t.match(/"regularMarketPrice"\s*:\s*([\d.]+)/) || [])[1])
+                },
+                {
+                    name: 'Yahoo2',
+                    url: 'https://query2.finance.yahoo.com/v8/finance/chart/%5EVIX?interval=1d&range=1d',
+                    parse: t => parseFloat((t.match(/"regularMarketPrice"\s*:\s*([\d.]+)/) || [])[1])
+                },
+                {
+                    name: 'Stooq',
+                    url: 'https://stooq.com/q/l/?s=%5Evix&f=sd2t2c&h&e=csv',
+                    parse: t => {
+                        const m = t.match(/\^?VIX,[\d-]+,[\d:]+,([\d.]+)/i);
+                        return m ? parseFloat(m[1]) : NaN;
+                    }
+                }
+            ];
+
+            const direct = { name: 'direct', wrap: u => u };
+            const proxies = [
+                { name: 'allorigins', wrap: u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u) },
+                { name: 'corsproxy', wrap: u => 'https://corsproxy.io/?' + encodeURIComponent(u) },
+                { name: 'codetabs', wrap: u => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u) }
+            ];
+
+            const attempt = async (src, px) => {
+                const res = await fetchWithTimeout(px.wrap(src.url), {}, 8500);
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const text = await res.text();
+                const v = src.parse(text);
+                if (!(v >= 5 && v <= 150)) throw new Error('invalid VIX');
+                return { v, route: [src, px] };
+            };
+
+            const raceAll = async (pairs) => {
+                if (!pairs.length) return null;
+                try { return await Promise.any(pairs.map(([s, px]) => attempt(s, px))); }
+                catch (e) { return null; }
+            };
+
+            let vixValue = null;
+            let found = null;
+            if (lastVixRoute) found = await raceAll([lastVixRoute]);
+            if (!found) found = await raceAll(sources.map(s => [s, direct]));
+            if (!found) found = await raceAll(sources.filter(s => s.name !== 'Yahoo2').flatMap(s => proxies.map(px => [s, px])));
+
+            if (found) {
+                vixValue = found.v;
+                lastVixRoute = found.route;
+                lastVixSource = `${found.route[0].name} (${found.route[1].name})`;
+            } else {
+                lastVixRoute = null;
+            }
+
+            if (vixValue === null) vixValue = lastVixValue;
+
+            if (vixValue === null) {
+                valEl.innerText = 'N/A';
+                regimeEl.innerText = 'ไม่มีข้อมูล';
+                regimeEl.className = "text-[11px] font-bold text-slate-400";
+                dotEl.className = "w-2.5 h-2.5 rounded-full bg-slate-500";
+                return;
+            }
+            lastVixValue = vixValue;
+
+            valEl.innerText = vixValue.toFixed(2);
+            valEl.title = `ข้อมูลจาก CBOE VIX [${lastVixSource}]`;
+
+            if (vixValue < 15) {
+                regimeEl.innerText = "สงบมาก (Low Vol)";
+                regimeEl.className = "text-[11px] font-bold text-emerald-400";
+                dotEl.className = "w-2.5 h-2.5 rounded-full bg-emerald-400";
+            } else if (vixValue <= 20) {
+                regimeEl.innerText = "ปกติ (Normal)";
+                regimeEl.className = "text-[11px] font-bold text-sky-400";
+                dotEl.className = "w-2.5 h-2.5 rounded-full bg-sky-400";
+            } else if (vixValue <= 25) {
+                regimeEl.innerText = "ผันผวนสูง (Elevated)";
+                regimeEl.className = "text-[11px] font-bold text-amber-400";
+                dotEl.className = "w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse";
+            } else {
+                regimeEl.innerText = "เสี่ยงสูงจัด (High Panic)";
+                regimeEl.className = "text-[11px] font-bold text-rose-400";
+                dotEl.className = "w-2.5 h-2.5 rounded-full bg-rose-400 animate-ping";
+            }
+        }
+
+        // ==========================================
+        // SPOT & DERIBit OPTIONS FETCHER
+        // ==========================================
+        async function refreshSpotPriceOnly() {
+            const bn = await fetchJsonWithProxy('https://fapi.binance.com/fapi/v1/ticker/price?symbol=BTCUSDT', 3500, false);
+            const bp = parseFloat(bn && bn.price);
+            if (bp > 0) {
+                currentSpotForBar = bp;
+                binanceSpotOk = true;
+                updateHeaderSpotBadge();
+                return true;
+            }
+            binanceSpotOk = false;
+            const dr = await fetchJsonWithProxy('https://www.deribit.com/api/v2/public/get_index_price?index_name=btc_usd', 4500);
+            const dp = parseFloat(dr && dr.result && dr.result.index_price);
+            if (dp > 0) {
+                currentSpotForBar = dp;
+                deribitSpot = dp;
+                updateHeaderSpotBadge();
+                return true;
+            }
+            return false;
+        }
+
+        async function fetchDeribitOptionsData() {
+            if (isFetchingOptions) return;
+            isFetchingOptions = true;
+            try {
+                const bookUrl = 'https://www.deribit.com/api/v2/public/get_book_summary_by_currency?currency=BTC&kind=option';
+                const idxUrl = 'https://www.deribit.com/api/v2/public/get_index_price?index_name=btc_usd';
+                const [bookJson, idxJson] = await Promise.all([
+                    fetchJsonWithProxy(bookUrl, 15000),
+                    fetchJsonWithProxy(idxUrl, 6000)
+                ]);
+                const data = bookJson && Array.isArray(bookJson.result) ? bookJson.result : null;
+
+                if (!data || data.length === 0) {
+                    showOptionsUnavailable();
+                    return;
+                }
+
+                rawDeribitOptions = data;
+
+                let spot = parseFloat(idxJson && idxJson.result && idxJson.result.index_price);
+                if (!(spot > 0)) {
+                    const edp = data.map(d => parseFloat(d.estimated_delivery_price)).filter(v => v > 0).sort((a, b) => a - b);
+                    if (edp.length) spot = edp[Math.floor(edp.length / 2)];
+                }
+                if (!(spot > 0)) {
+                    const fw = data.map(d => parseFloat(d.underlying_price)).filter(v => v > 0).sort((a, b) => a - b);
+                    if (fw.length) spot = fw[Math.floor(fw.length / 2)];
+                }
+                deribitSpot = spot > 0 ? spot : null;
+                if (!binanceSpotOk && deribitSpot) currentSpotForBar = deribitSpot;
+
+                updateHeaderSpotBadge();
+                populateExpiryDropdown();
+                applyExpiryFilterAndRender();
+                updateSmileChart();
+                renderGexSection();
+                calculateMove();
+            } finally {
+                isFetchingOptions = false;
+            }
+        }
+
+        function showOptionsUnavailable() {
+            if (rawDeribitOptions.length > 0) {
+                updateStatus('warning', '⚠️ รีเฟรชข้อมูล Deribit ไม่สำเร็จชั่วคราว — กำลังแสดงข้อมูลชุดล่าสุด');
+                return;
+            }
+            [oiChartInstance, volChartInstance, gexChartInstance, smileChartInstance].forEach(c => { if (c) c.destroy(); });
+            oiChartInstance = volChartInstance = gexChartInstance = smileChartInstance = null;
+            const msg = 'ไม่สามารถโหลดข้อมูล Deribit ได้ (ระบบจะลองใหม่อัตโนมัติ)';
+            setText('activeExpiryNotice', msg);
+            setText('gexRegimeChip', '--');
+            setText('gexRegimeDesc', msg);
+            setText('gexNotice', '');
+            updateStatus('warning', '⚠️ ' + msg);
+        }
+
+        function parseDeribitExpiry(expiryStr) {
+            const match = expiryStr.match(/^(\d{1,2})([A-Z]{3})(\d{2})$/);
+            if (!match) return null;
+            const day = parseInt(match[1], 10);
+            const monthStr = match[2];
+            const year = 2000 + parseInt(match[3], 10);
+            const months = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5, JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11 };
+            const month = months[monthStr];
+            if (month === undefined) return null;
+            // Deribit options expire at 08:00 UTC (15:00 ICT)
+            return new Date(Date.UTC(year, month, day, 8, 0, 0));
+        }
+
+        function formatExpiryDisplayDate(dateObj, expiryCode) {
+            if (!dateObj) return expiryCode;
+            const day = dateObj.getUTCDate();
+            const thaiMonths = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+            const monthThai = thaiMonths[dateObj.getUTCMonth()];
+            const thaiYearShort = (dateObj.getUTCFullYear() + 543) % 100;
+            return `${day} ${monthThai} ${thaiYearShort} (${expiryCode})`;
+        }
+
+        // Custom Smile Dropdown Menu
+        let isSmileMenuOpen = false;
+        function toggleSmileMenu() {
+            const menu = document.getElementById('customSmileMenu');
+            const icon = document.getElementById('customSmileIcon');
+            isSmileMenuOpen = !isSmileMenuOpen;
+            if (isSmileMenuOpen) {
+                menu.classList.remove('opacity-0', 'invisible', '-translate-y-2');
+                menu.classList.add('opacity-100', 'visible', 'translate-y-0');
+                icon.classList.add('rotate-180');
+            } else {
+                menu.classList.add('opacity-0', 'invisible', '-translate-y-2');
+                menu.classList.remove('opacity-100', 'visible', 'translate-y-0');
+                icon.classList.remove('rotate-180');
+            }
+        }
+
+        function selectCustomSmileOption(value) {
+            setText('customSmileDisplay', value);
+            const nativeSelect = document.getElementById('smileExpirySelect');
+            nativeSelect.value = value;
+            nativeSelect.dispatchEvent(new Event('change'));
+            toggleSmileMenu();
+        }
+
+        document.addEventListener('click', (e) => {
+            const btn = document.getElementById('customSmileBtn');
+            const menu = document.getElementById('customSmileMenu');
+            if (isSmileMenuOpen && btn && !btn.contains(e.target) && !menu.contains(e.target)) {
+                toggleSmileMenu();
+            }
+        });
+
+        function populateExpiryDropdown() {
+            const selectEl = document.getElementById('customExpirySelect');
+            const smileSelectEl = document.getElementById('smileExpirySelect');
+            const customSmileList = document.getElementById('customSmileList');
+
+            const prevSmileSelection = smileSelectEl.value;
+            const prevCustomExpiry = selectEl.value;
+
+            const datesSet = new Set();
+            rawDeribitOptions.forEach(item => {
+                const parts = item.instrument_name.split('-');
+                if (parts.length >= 4) datesSet.add(parts[1]);
+            });
+
+            const now = new Date();
+            availableExpiries = Array.from(datesSet)
+                .map(str => ({ str, date: parseDeribitExpiry(str) }))
+                .filter(d => d.date !== null && d.date.getTime() > now.getTime() - 3600 * 1000)
+                .sort((a, b) => a.date - b.date);
+
+            selectEl.innerHTML = '<option value="">📅 เลือกวันหมดอายุเฉพาะเจาะจง...</option>';
+            smileSelectEl.innerHTML = '';
+            if (customSmileList) customSmileList.innerHTML = '';
+
+            const nearestExpiryObj = availableExpiries.find(e => e.date >= now) || availableExpiries[0];
+
+            if (nearestExpiryObj) {
+                const subLabel = document.getElementById('btn-0dte-sub');
+                if (subLabel) {
+                    const d = nearestExpiryObj.date;
+                    const thaiMonths = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+                    subLabel.innerText = `(${d.getUTCDate()} ${thaiMonths[d.getUTCMonth()]} / ${nearestExpiryObj.str})`;
+                }
+            }
+
+            availableExpiries.forEach(item => {
+                const d = item.date;
+                const dteDays = Math.max(0, (d - now) / 86400000);
+                const formatted = `${d.getUTCDate()} ${d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })} ${d.getUTCFullYear()} (${dteDays < 1 ? '<1d' : Math.round(dteDays) + 'd'})`;
+
+                const optMain = document.createElement('option');
+                optMain.value = item.str;
+                optMain.innerText = `${item.str} · ${formatted}`;
+                selectEl.appendChild(optMain);
+
+                const optSmile = document.createElement('option');
+                optSmile.value = item.str;
+                optSmile.innerText = item.str;
+                smileSelectEl.appendChild(optSmile);
+
+                if (customSmileList) {
+                    const li = document.createElement('li');
+                    li.className = "px-3.5 py-2 text-xs font-mono text-slate-300 hover:bg-slate-800 hover:text-sky-300 cursor-pointer transition-colors border-b border-slate-800/60 last:border-none flex items-center justify-between";
+                    li.innerHTML = `<span class="font-bold">${item.str}</span><span class="text-[10px] text-slate-400">${dteDays < 1 ? (dteDays * 24).toFixed(1) + 'h' : dteDays.toFixed(1) + 'd'}</span>`;
+                    li.onclick = () => selectCustomSmileOption(item.str);
+                    customSmileList.appendChild(li);
+                }
+            });
+
+            populateGexExpirySelect();
+
+            if (!['0dte', 'weekly', 'monthly', 'all'].includes(currentExpiryFilter)) {
+                const validCustom = availableExpiries.some(e => e.str === currentExpiryFilter);
+                if (validCustom) selectEl.value = currentExpiryFilter;
+                else if (prevCustomExpiry) selectEl.value = prevCustomExpiry;
+            }
+
+            if (availableExpiries.length > 0) {
+                const stillValidSmile = availableExpiries.some(e => e.str === prevSmileSelection);
+                if (prevSmileSelection && stillValidSmile) {
+                    smileSelectEl.value = prevSmileSelection;
+                    setText('customSmileDisplay', prevSmileSelection);
+                } else {
+                    const defaultExpiryStr = nearestExpiryObj ? nearestExpiryObj.str : availableExpiries[0].str;
+                    smileSelectEl.value = defaultExpiryStr;
+                    setText('customSmileDisplay', defaultExpiryStr);
+                }
+            }
+        }
+
+        function onCustomDateSelected(val) {
+            if (!val) return;
+            currentExpiryFilter = val;
+            ['0dte', 'weekly', 'monthly', 'all'].forEach(k => {
+                document.getElementById(`btn-${k}`).className = "px-2.5 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white flex items-center gap-1.5";
+            });
+            applyExpiryFilterAndRender();
+        }
+
+        function setExpiryFilter(type) {
+            currentExpiryFilter = type;
+            document.getElementById('customExpirySelect').value = "";
+            ['0dte', 'weekly', 'monthly', 'all'].forEach(k => {
+                const btn = document.getElementById(`btn-${k}`);
+                if (k === type) {
+                    btn.className = "px-2.5 py-1.5 rounded-lg font-bold transition bg-amber-500 text-slate-950 shadow-sm flex items-center gap-1.5";
+                } else {
+                    btn.className = "px-2.5 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white flex items-center gap-1.5";
+                }
+            });
+            applyExpiryFilterAndRender();
+        }
+
+        // Fixed Max Pain Calculation: ignores 0-OI boundary strikes & breaks ties closest to Spot
+        function calculateMaxPain(strikeMap, spotPrice = 0) {
+            const activeStrikes = Object.keys(strikeMap)
+                .map(Number)
+                .filter(k => ((strikeMap[k].callOi || 0) + (strikeMap[k].putOi || 0)) > 0)
+                .sort((a, b) => a - b);
+
+            if (activeStrikes.length === 0) return null;
+
+            let minCashLoss = Infinity;
+            let maxPainStrike = activeStrikes[0];
+
+            activeStrikes.forEach(settlementPrice => {
+                let totalLoss = 0;
+                for (let i = 0; i < activeStrikes.length; i++) {
+                    const strike = activeStrikes[i];
+                    const callOi = strikeMap[strike].callOi || 0;
+                    const putOi = strikeMap[strike].putOi || 0;
+                    if (settlementPrice > strike) totalLoss += (settlementPrice - strike) * callOi;
+                    else if (settlementPrice < strike) totalLoss += (strike - settlementPrice) * putOi;
+                }
+                if (totalLoss < minCashLoss - 1e-6) {
+                    minCashLoss = totalLoss;
+                    maxPainStrike = settlementPrice;
+                } else if (Math.abs(totalLoss - minCashLoss) <= 1e-6 && spotPrice > 0) {
+                    if (Math.abs(settlementPrice - spotPrice) < Math.abs(maxPainStrike - spotPrice)) {
+                        maxPainStrike = settlementPrice;
+                    }
+                }
+            });
+            return maxPainStrike;
+        }
+
+        function applyExpiryFilterAndRender() {
+            if (!rawDeribitOptions || rawDeribitOptions.length === 0) return;
+
+            const spotPrice = getSpotPrice();
+            setText('atmLabel', `ATM: ~$${Math.round(spotPrice).toLocaleString()}`);
+
+            const now = new Date();
+            const noticeEl = document.getElementById('activeExpiryNotice');
+
+            let filteredItems = rawDeribitOptions;
+            let maxDteDays = 365;
+
+            if (currentExpiryFilter === '0dte') {
+                const nextExpiry = availableExpiries.find(e => e.date >= now) || availableExpiries[0];
+                if (nextExpiry) {
+                    filteredItems = rawDeribitOptions.filter(i => i.instrument_name.split('-')[1] === nextExpiry.str);
+                    const formattedDate = formatExpiryDisplayDate(nextExpiry.date, nextExpiry.str);
+                    noticeEl.innerHTML = `สัญญา 0DTE / ใกล้สุด: <span class="text-amber-300 font-mono underline decoration-amber-500/50 underline-offset-2">${formattedDate}</span>`;
+                    maxDteDays = Math.max(0.1, (nextExpiry.date - now) / 86400000);
+                }
+            } else if (currentExpiryFilter === 'weekly') {
+                const oneWeekLater = new Date(now.getTime() + (7 * 86400000));
+                const weeklyExpiries = availableExpiries.filter(e => e.date >= now && e.date <= oneWeekLater).map(e => e.str);
+                if (weeklyExpiries.length > 0) {
+                    filteredItems = rawDeribitOptions.filter(i => weeklyExpiries.includes(i.instrument_name.split('-')[1]));
+                    noticeEl.innerText = `สัญญาประจำสัปดาห์ (ภายใน 7 วัน: ${weeklyExpiries.join(', ')})`;
+                }
+                maxDteDays = 7;
+            } else if (currentExpiryFilter === 'monthly') {
+                const oneMonthLater = new Date(now.getTime() + (31 * 86400000));
+                const monthlyExpiries = availableExpiries.filter(e => e.date >= now && e.date <= oneMonthLater).map(e => e.str);
+                if (monthlyExpiries.length > 0) {
+                    filteredItems = rawDeribitOptions.filter(i => monthlyExpiries.includes(i.instrument_name.split('-')[1]));
+                    noticeEl.innerText = `สัญญาประจำเดือน (ภายใน 30 วัน · ${monthlyExpiries.length} วันหมดอายุ)`;
+                }
+                maxDteDays = 31;
+            } else if (currentExpiryFilter === 'all') {
+                noticeEl.innerText = `ทุกวันหมดอายุรวมกัน (All Active Expiries)`;
+                maxDteDays = 365;
+            } else {
+                filteredItems = rawDeribitOptions.filter(i => i.instrument_name.split('-')[1] === currentExpiryFilter);
+                const expiryObj = availableExpiries.find(e => e.str === currentExpiryFilter);
+                const formattedDate = expiryObj ? formatExpiryDisplayDate(expiryObj.date, currentExpiryFilter) : currentExpiryFilter;
+                noticeEl.innerHTML = `สัญญาเฉพาะวันที่: <span class="text-amber-300 font-mono">${formattedDate}</span>`;
+                if (expiryObj) maxDteDays = Math.max(0.1, (expiryObj.date - now) / 86400000);
+            }
+
+            setText('optionsCountNotice', `${filteredItems.length.toLocaleString()} สัญญา`);
+            processAndRenderOptions(filteredItems, spotPrice, maxDteDays);
+        }
+
+        function processAndRenderOptions(items, spotPrice, maxDteDays = 7) {
+            const strikeMap = {};
+            let totalCallOi = 0, totalPutOi = 0;
+            let totalCallVol = 0, totalPutVol = 0;
+
+            items.forEach(item => {
+                const parts = item.instrument_name.split('-');
+                if (parts.length >= 4) {
+                    const strike = parseInt(parts[2], 10);
+                    const type = parts[3];
+                    const oi = parseFloat(item.open_interest) || 0;
+                    const vol = parseFloat(item.volume) || 0;
+
+                    if (!strikeMap[strike]) {
+                        strikeMap[strike] = { callOi: 0, putOi: 0, callVol: 0, putVol: 0 };
+                    }
+
+                    if (type === 'C') {
+                        strikeMap[strike].callOi += oi;
+                        strikeMap[strike].callVol += vol;
+                        totalCallOi += oi;
+                        totalCallVol += vol;
+                    } else if (type === 'P') {
+                        strikeMap[strike].putOi += oi;
+                        strikeMap[strike].putVol += vol;
+                        totalPutOi += oi;
+                        totalPutVol += vol;
+                    }
+                }
+            });
+
+            // Update OI & Volume PCR + Summary Headers
+            const oiPcr = totalCallOi > 0 ? (totalPutOi / totalCallOi) : 0;
+            const volPcr = totalCallVol > 0 ? (totalPutVol / totalCallVol) : 0;
+
+            setText('oiPcrBadge', `PCR: ${totalCallOi > 0 ? oiPcr.toFixed(2) : '--'}`);
+            setText('oiSummarySub', `Call: ${Math.round(totalCallOi).toLocaleString()} BTC · Put: ${Math.round(totalPutOi).toLocaleString()} BTC (รวม ${Math.round(totalCallOi + totalPutOi).toLocaleString()} BTC)`);
+
+            setText('volPcrBadge', `PCR: ${totalCallVol > 0 ? volPcr.toFixed(2) : '--'}`);
+            setText('volSummarySub', `Call Vol: ${Math.round(totalCallVol).toLocaleString()} BTC · Put Vol: ${Math.round(totalPutVol).toLocaleString()} BTC (รวม ${Math.round(totalCallVol + totalPutVol).toLocaleString()} BTC)`);
+
+            const maxPainPrice = calculateMaxPain(strikeMap, spotPrice);
+            latestSummaryCache.maxPain = maxPainPrice;
+            if (maxPainPrice) {
+                setText('maxPainLabel', `Max Pain: ~$${maxPainPrice.toLocaleString()}`);
+            } else {
+                setText('maxPainLabel', `Max Pain: --`);
+            }
+
+            const allStrikes = Object.keys(strikeMap).map(Number).sort((a, b) => a - b);
+
+            // Smart adaptive strike window based on expiry horizon (never drops 500-step strikes!)
+            const rangePct = maxDteDays <= 2 ? 0.12 : (maxDteDays <= 10 ? 0.18 : 0.28);
+            let selectedStrikes = allStrikes.filter(s =>
+                s >= spotPrice * (1 - rangePct) &&
+                s <= spotPrice * (1 + rangePct) &&
+                ((strikeMap[s].callOi + strikeMap[s].putOi + strikeMap[s].callVol + strikeMap[s].putVol) > 0)
+            );
+
+            if (selectedStrikes.length < 6) {
+                selectedStrikes = allStrikes.filter(s =>
+                    ((strikeMap[s].callOi + strikeMap[s].putOi + strikeMap[s].callVol + strikeMap[s].putVol) > 0)
+                );
+            }
+            if (selectedStrikes.length === 0) {
+                selectedStrikes = allStrikes.slice(0, 25);
+            }
+
+            if (maxPainPrice && !selectedStrikes.includes(maxPainPrice) && maxPainPrice >= spotPrice * 0.65 && maxPainPrice <= spotPrice * 1.35) {
+                selectedStrikes.push(maxPainPrice);
+                selectedStrikes.sort((a, b) => a - b);
+            }
+
+            const labels = selectedStrikes.map(s => s.toLocaleString());
+            const callOiData = selectedStrikes.map(s => strikeMap[s]?.callOi || 0);
+            const putOiData = selectedStrikes.map(s => strikeMap[s]?.putOi || 0);
+            const callVolData = selectedStrikes.map(s => strikeMap[s]?.callVol || 0);
+            const putVolData = selectedStrikes.map(s => strikeMap[s]?.putVol || 0);
+
+            let closestAtmIndex = 0;
+            let minDiffAtm = Infinity;
+            selectedStrikes.forEach((s, i) => {
+                const diff = Math.abs(s - spotPrice);
+                if (diff < minDiffAtm) {
+                    minDiffAtm = diff;
+                    closestAtmIndex = i;
+                }
+            });
+
+            let closestMpIndex = -1;
+            if (maxPainPrice) {
+                closestMpIndex = selectedStrikes.indexOf(maxPainPrice);
+                if (closestMpIndex === -1) {
+                    let minDiffMp = Infinity;
+                    selectedStrikes.forEach((s, i) => {
+                        const diff = Math.abs(s - maxPainPrice);
+                        if (diff < minDiffMp) {
+                            minDiffMp = diff;
+                            closestMpIndex = i;
+                        }
+                    });
+                }
+            }
+
+            buildChart('oiChart', labels, callOiData, putOiData, 'Call OI', 'Put OI', closestAtmIndex, closestMpIndex);
+            buildChart('volChart', labels, callVolData, putVolData, 'Call Volume', 'Put Volume', closestAtmIndex, closestMpIndex);
+        }
+
+        // ==========================================
+        // GEX PROFILE (Black-76 Fast Precomputed Engine)
+        // ==========================================
+        let gexFilter = '0dte';
+        let gexMode = 'abs';
+
+        function setGexFilter(type) {
+            gexFilter = type;
+            const sel = document.getElementById('gexExpirySelect');
+            if (sel) sel.value = '';
+            updateGexButtons();
+            renderGexSection();
+        }
+
+        function onGexDateSelected(val) {
+            if (!val) return;
+            gexFilter = val;
+            updateGexButtons();
+            renderGexSection();
+        }
+
+        function setGexMode(mode) {
+            gexMode = mode;
+            updateGexButtons();
+            renderGexSection();
+        }
+
+        function updateGexButtons() {
+            ['0dte', 'weekly', 'monthly', 'all'].forEach(k => {
+                const btn = document.getElementById(`gex-btn-${k}`);
+                if (!btn) return;
+                btn.className = (k === gexFilter)
+                    ? "px-2.5 py-1.5 rounded-lg font-bold transition bg-amber-500 text-slate-950 shadow-sm"
+                    : "px-2.5 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white";
+            });
+            ['net', 'abs'].forEach(k => {
+                const btn = document.getElementById(`gex-mode-${k}`);
+                if (!btn) return;
+                btn.className = (k === gexMode)
+                    ? "px-2.5 py-1.5 rounded-lg font-bold transition bg-sky-500 text-slate-950 shadow-sm"
+                    : "px-2.5 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white";
+            });
+        }
+
+        function populateGexExpirySelect() {
+            const sel = document.getElementById('gexExpirySelect');
+            if (!sel) return;
+            const prev = ['0dte', 'weekly', 'monthly', 'all'].includes(gexFilter) ? '' : gexFilter;
+            sel.innerHTML = '<option value="">📅 เลือกวันที่หมดอายุ...</option>';
+            const now = new Date();
+            availableExpiries.forEach(item => {
+                if (item.date < now) return;
+                const d = item.date;
+                const opt = document.createElement('option');
+                opt.value = item.str;
+                opt.innerText = `${item.str} (${d.getUTCDate()} ${d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })} ${d.getUTCFullYear()})`;
+                sel.appendChild(opt);
+            });
+            if (prev && availableExpiries.some(e => e.str === prev)) sel.value = prev;
+        }
+
+        const INV_SQRT_2PI = 1 / Math.sqrt(2 * Math.PI);
+        function gexPdf(x) { return Math.exp(-0.5 * x * x) * INV_SQRT_2PI; }
+
+        function bsGamma(F, K, T, sigma) {
+            if (!(F > 0 && K > 0 && T > 0 && sigma > 0)) return 0;
+            const v = sigma * Math.sqrt(T);
+            const d1 = (Math.log(F / K) + 0.5 * sigma * sigma * T) / v;
+            return gexPdf(d1) / (F * v);
+        }
+
+        function gexValue(gamma, oi, F) {
+            return gamma * oi * F * F * 0.01 / 1e6;
+        }
+
+        function getGexExpiries() {
+            const now = new Date();
+            const DAY = 86400000;
+            const live = availableExpiries.filter(e => e.date >= now);
+            const nearest = live[0] || availableExpiries[0];
+            let list = [];
+            let label = '';
+            if (gexFilter === '0dte') {
+                list = nearest ? [nearest] : [];
+                label = nearest ? `0DTE / ใกล้สุด: ${formatExpiryDisplayDate(nearest.date, nearest.str)}` : '';
+            } else if (gexFilter === 'weekly') {
+                list = live.filter(e => e.date <= new Date(now.getTime() + 7 * DAY));
+                label = `สัปดาห์นี้ (ภายใน 7 วัน): ${list.map(e => e.str).join(', ')}`;
+            } else if (gexFilter === 'monthly') {
+                list = live.filter(e => e.date <= new Date(now.getTime() + 31 * DAY));
+                label = `เดือนนี้ (ภายใน 30 วัน): ${list.length} วันหมดอายุ`;
+            } else if (gexFilter === 'all') {
+                list = live;
+                label = `ทุกวันหมดอายุ: ${list.length} วัน`;
+            } else {
+                const found = availableExpiries.find(e => e.str === gexFilter);
+                list = found ? [found] : [];
+                label = found ? `วันที่เลือก: ${formatExpiryDisplayDate(found.date, found.str)}` : '';
+            }
+            if (list.length === 0 && nearest && gexFilter !== 'all') {
+                list = [nearest];
+                label += ' (ใช้วันใกล้สุดแทน)';
+            }
+            return { list, label };
+        }
+
+        function collectGexContracts(spot) {
+            const { list, label } = getGexExpiries();
+            const expMap = {};
+            list.forEach(e => { expMap[e.str] = e.date; });
+            const now = Date.now();
+            const contracts = [];
+            rawDeribitOptions.forEach(item => {
+                const parts = item.instrument_name.split('-');
+                if (parts.length < 4) return;
+                const expDate = expMap[parts[1]];
+                if (!expDate) return;
+                const K = parseFloat(parts[2]);
+                const type = parts[3];
+                const oi = parseFloat(item.open_interest) || 0;
+                const iv = (parseFloat(item.mark_iv) || 0) / 100;
+                if (!(oi > 0) || !(iv > 0) || !(K > 0) || (type !== 'C' && type !== 'P')) return;
+
+                // Clamp minimum time to 15 minutes (prevents near-settlement singularity while staying accurate)
+                const T = Math.max((expDate.getTime() - now) / (365 * 86400000), 0.25 / (365 * 24));
+                const F = parseFloat(item.underlying_price) || spot;
+                const ratio = F / spot;
+                const v = iv * Math.sqrt(T);
+                const halfVarT = 0.5 * iv * iv * T;
+                const lnRatioOverK = Math.log(ratio / K);
+                const sign = type === 'C' ? 1 : -1;
+                // Notice: gamma * oi * F^2 * 0.01 / 1e6 = (pdf(d1) / (F * v)) * oi * F^2 * 0.01 / 1e6 = pdf(d1) * F * (oi * 0.01 / (1e6 * v))
+                const coeff = sign * (oi * ratio * 0.01 * INV_SQRT_2PI) / (1e6 * v);
+
+                contracts.push({ K, type, oi, iv, T, S: F, ratio, v, halfVarT, lnRatioOverK, coeff });
+            });
+            return { contracts, label };
+        }
+
+        // Fast exact evaluation of total net GEX at hypothetical spot price `price`
+        function totalNetGexAt(contracts, price) {
+            const lnP = Math.log(price);
+            let total = 0;
+            for (let i = 0; i < contracts.length; i++) {
+                const c = contracts[i];
+                const d1 = (lnP + c.lnRatioOverK + c.halfVarT) / c.v;
+                total += c.coeff * price * Math.exp(-0.5 * d1 * d1);
+            }
+            return total;
+        }
+
+        function scanNetGex(contracts, spot) {
+            const lo = spot * 0.60, hi = spot * 1.40, steps = 200;
+            const pts = [];
+            for (let i = 0; i <= steps; i++) {
+                const p = lo + (hi - lo) * i / steps;
+                pts.push({ p, v: totalNetGexAt(contracts, p) });
+            }
+            return pts;
+        }
+
+        // Zero-crossing of total net GEX closest to spot with bisection refinement
+        function flipFromScan(pts, contracts, spot) {
+            let best = null;
+            for (let i = 1; i < pts.length; i++) {
+                const a = pts[i - 1], b = pts[i];
+                if ((a.v < 0 && b.v >= 0) || (a.v > 0 && b.v <= 0)) {
+                    let loP = a.p, hiP = b.p, loV = a.v;
+                    for (let iter = 0; iter < 10; iter++) {
+                        const midP = 0.5 * (loP + hiP);
+                        const midV = totalNetGexAt(contracts, midP);
+                        if ((loV < 0 && midV >= 0) || (loV > 0 && midV <= 0)) {
+                            hiP = midP;
+                        } else {
+                            loP = midP;
+                            loV = midV;
+                        }
+                    }
+                    const x = 0.5 * (loP + hiP);
+                    if (best === null || Math.abs(x - spot) < Math.abs(best - spot)) best = x;
+                }
+            }
+            return best;
+        }
+
+        function zoneSegments(pts, minP, maxP) {
+            const segs = [];
+            for (let i = 1; i < pts.length; i++) {
+                const from = Math.max(pts[i - 1].p, minP);
+                const to = Math.min(pts[i].p, maxP);
+                if (to <= from) continue;
+                const sign = (pts[i - 1].v + pts[i].v) / 2 >= 0 ? 1 : -1;
+                const last = segs[segs.length - 1];
+                if (last && last.sign === sign) last.to = to;
+                else segs.push({ from, to, sign });
+            }
+            return segs;
+        }
+
+        function fmtM(v, digits = 1) {
+            const a = Math.abs(v);
+            const sign = v < 0 ? '-' : '';
+            if (a >= 1000) return `${sign}$${(a / 1000).toFixed(2)}B`;
+            return `${sign}$${a.toFixed(digits)}M`;
+        }
+
+        function fracIndex(strikes, price) {
+            if (!strikes.length || price < strikes[0] || price > strikes[strikes.length - 1]) return null;
+            for (let i = 0; i < strikes.length - 1; i++) {
+                if (price >= strikes[i] && price <= strikes[i + 1]) {
+                    const span = strikes[i + 1] - strikes[i];
+                    return i + (span === 0 ? 0 : (price - strikes[i]) / span);
+                }
+            }
+            return strikes.length - 1;
+        }
+
+        function renderGexSection() {
+            if (!rawDeribitOptions || rawDeribitOptions.length === 0) return;
+            updateGexButtons();
+
+            const spot = getSpotPrice();
+            const { contracts, label } = collectGexContracts(spot);
+            setText('gexNotice', label);
+            setText('gexUpdated', new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' น.');
+
+            if (contracts.length === 0) {
+                if (gexChartInstance) { gexChartInstance.destroy(); gexChartInstance = null; }
+                setText('gexRegimeChip', '--');
+                setText('gexRegimeDesc', 'ไม่พบสัญญาที่มี OI และ IV ในช่วงที่เลือก');
+                return;
+            }
+
+            const map = {};
+            contracts.forEach(c => {
+                const g = gexValue(bsGamma(c.S, c.K, c.T, c.iv), c.oi, c.S);
+                if (!map[c.K]) map[c.K] = { call: 0, put: 0 };
+                if (c.type === 'C') map[c.K].call += g; else map[c.K].put += g;
+            });
+
+            const allStrikes = Object.keys(map).map(Number).sort((a, b) => a - b);
+
+            // Key walls across all active strikes
+            let callWall = null, putWall = null, absPeak = null;
+            let maxC = 0, maxP = 0, maxA = 0;
+            allStrikes.forEach(s => {
+                if (map[s].call > maxC) { maxC = map[s].call; callWall = s; }
+                if (map[s].put > maxP) { maxP = map[s].put; putWall = s; }
+                const a = map[s].call + map[s].put;
+                if (a > maxA) { maxA = a; absPeak = s; }
+            });
+
+            const scan = scanNetGex(contracts, spot);
+            const flip = flipFromScan(scan, contracts, spot);
+
+            // Ensure chart strike range includes Spot ±28% and stretches if CallWall/PutWall/Flip are slightly further
+            let lowBound = spot * 0.72;
+            let highBound = spot * 1.28;
+            if (putWall && putWall >= spot * 0.55) lowBound = Math.min(lowBound, putWall * 0.98);
+            if (callWall && callWall <= spot * 1.45) highBound = Math.max(highBound, callWall * 1.02);
+            if (flip && flip >= spot * 0.60 && flip <= spot * 1.40) {
+                lowBound = Math.min(lowBound, flip * 0.98);
+                highBound = Math.max(highBound, flip * 1.02);
+            }
+
+            let strikes = allStrikes.filter(s => s >= lowBound && s <= highBound);
+            if (strikes.length < 2) strikes = allStrikes;
+
+            const callGex = strikes.map(s => map[s].call);
+            const putGex = strikes.map(s => -map[s].put);
+            const netGex = strikes.map((s, i) => callGex[i] + putGex[i]);
+            const absGex = strikes.map((s, i) => callGex[i] + Math.abs(putGex[i]));
+
+            const totalCall = allStrikes.reduce((a, s) => a + map[s].call, 0);
+            const totalPut = allStrikes.reduce((a, s) => a + map[s].put, 0);
+            const netTotal = totalCall - totalPut;
+            const absTotal = totalCall + totalPut;
+
+            latestSummaryCache.callWall = callWall;
+            latestSummaryCache.putWall = putWall;
+            latestSummaryCache.gammaFlip = flip ? Math.round(flip) : null;
+            latestSummaryCache.netGex = netTotal;
+
+            const segments = zoneSegments(scan, strikes[0], strikes[strikes.length - 1]);
+
+            const pct = (p) => {
+                if (!p) return '--';
+                const d = (p - spot) / spot * 100;
+                return `${d >= 0 ? '+' : ''}${d.toFixed(1)}%`;
+            };
+
+            setText('gexCallWall', callWall ? `$${callWall.toLocaleString()}` : '--');
+            setText('gexCallWallSub', callWall ? `${pct(callWall)} จาก Spot · ${fmtM(maxC)}` : '--');
+            setText('gexPutWall', putWall ? `$${putWall.toLocaleString()}` : '--');
+            setText('gexPutWallSub', putWall ? `${pct(putWall)} จาก Spot · ${fmtM(-maxP)}` : '--');
+            setText('gexFlip', flip ? `$${Math.round(flip).toLocaleString()}` : 'ไม่พบ');
+            setText('gexFlipSub', flip ? `${pct(flip)} จาก Spot` : 'ไม่ตัดศูนย์ในช่วง ±40%');
+
+            setText('gexNet', `${netTotal >= 0 ? '+' : ''}${fmtM(netTotal)}`);
+            setText('gexNetSub', netTotal >= 0 ? 'Positive Gamma Regime' : 'Negative Gamma Regime');
+            const netEl = document.getElementById('gexNet');
+            if (netEl) netEl.className = `text-xl sm:text-2xl font-bold font-mono mt-2 leading-tight ${netTotal >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+
+            setText('gexAbs', fmtM(absTotal));
+            setText('gexAbsSub', absPeak ? `Peak $${absPeak.toLocaleString()} · ${fmtM(maxA)}` : '--');
+
+            const isPos = netTotal >= 0;
+            const ratio = absTotal > 0 ? netTotal / absTotal : 0;
+            const banner = document.getElementById('gexRegimeBanner');
+            if (banner) banner.className = `rounded-xl border p-4 grid grid-cols-1 lg:grid-cols-12 gap-4 transition-colors duration-500 ${isPos ? 'bg-emerald-950/15 border-emerald-500/25' : 'bg-rose-950/15 border-rose-500/25'}`;
+            const dotEl = document.getElementById('gexRegimeDot');
+            if (dotEl) dotEl.className = `w-3 h-3 rounded-full shrink-0 mt-1.5 ${isPos ? 'bg-emerald-400' : 'bg-rose-400 animate-pulse'}`;
+
+            const chipEl = document.getElementById('gexRegimeChip');
+            if (chipEl) {
+                chipEl.innerText = isPos ? 'Positive Gamma (Mean Reversion)' : 'Negative Gamma (Volatility Expansion)';
+                chipEl.className = `text-lg sm:text-xl font-bold leading-tight mt-0.5 ${isPos ? 'text-emerald-300' : 'text-rose-300'}`;
+            }
+            setText('gexRegimeDesc', isPos
+                ? 'Market Maker เทรดสวนทางราคา (ขึ้นขาย-ลงซื้อ) ช่วยดูดซับแรงกระแทก ราคามักแกว่งตัวในกรอบ'
+                : 'Market Maker ต้องเทรดตามทิศทางราคา (ขึ้นซื้อไล่-ลงขายซ้ำ) เร่งให้ราคาวิ่งเป็นเทรนด์แรงขึ้น');
+
+            const tag = (text, tone) => {
+                const tones = {
+                    pos: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+                    neg: 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                };
+                return `<span class="text-xs font-medium px-2 py-0.5 rounded-md border ${tones[tone]}">${text}</span>`;
+            };
+            const row = (labelTxt, labelCls, valueHtml) =>
+                `<div class="flex items-center justify-between gap-3">
+                    <span class="text-xs sm:text-sm font-medium ${labelCls}">${labelTxt}</span>
+                    <span class="flex items-center gap-2 text-xs sm:text-sm font-bold font-mono text-slate-100 whitespace-nowrap">${valueHtml}</span>
+                </div>`;
+            const sub = (t) => `<span class="text-xs font-normal text-slate-400">${t}</span>`;
+
+            const flow = fmtM(Math.abs(netTotal));
+            setHtml('gexHedgeFlow', isPos
+                ? row('ราคา +1%', 'text-rose-300', `${tag('MM ขายต้าน', 'neg')}≈ ${flow}`) +
+                  row('ราคา −1%', 'text-emerald-300', `${tag('MM ซื้อรับ', 'pos')}≈ ${flow}`)
+                : row('ราคา +1%', 'text-emerald-300', `${tag('MM ซื้อไล่', 'pos')}≈ ${flow}`) +
+                  row('ราคา −1%', 'text-rose-300', `${tag('MM ขายตาม', 'neg')}≈ ${flow}`));
+
+            setHtml('gexVsFlip', flip
+                ? row('ราคา Spot', 'text-slate-300', `$${Math.round(spot).toLocaleString()}${tag(spot >= flip ? 'เหนือ Flip' : 'ต่ำกว่า Flip', spot >= flip ? 'pos' : 'neg')}`) +
+                  row('Gamma Flip', 'text-sky-300', `$${Math.round(flip).toLocaleString()}${sub(pct(flip))}`)
+                : '<div class="text-xs sm:text-sm text-slate-400">ไม่พบจุดตัดศูนย์ในช่วง ±40% จาก Spot</div>');
+
+            setHtml('gexWallRange', (callWall && putWall)
+                ? row('Put Wall', 'text-rose-300', `$${putWall.toLocaleString()}${sub(pct(putWall))}`) +
+                  row('Call Wall', 'text-emerald-300', `$${callWall.toLocaleString()}${sub(pct(callWall))}`)
+                : '--');
+
+            setText('gexPressurePct', `${ratio >= 0 ? '+' : ''}${(ratio * 100).toFixed(0)}%`);
+            const dot = document.getElementById('gexPressureDot');
+            if (dot) dot.style.left = `${Math.max(2, Math.min(98, 50 + ratio * 50))}%`;
+
+            buildGexChartNew(strikes, callGex, putGex, netGex, absGex, spot, callWall, putWall, flip, segments);
+        }
+
+        function buildGexChartNew(strikes, callGex, putGex, netGex, absGex, spot, callWall, putWall, flip, segments) {
+            const canvas = document.getElementById('gexChart');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+
+            const isAbs = gexMode === 'abs';
+            const labels = strikes.map(s => s.toLocaleString());
+
+            const markers = [];
+            const addMarker = (price, text, color, fill) => {
+                if (!price) return;
+                const idx = fracIndex(strikes, price);
+                if (idx !== null) markers.push({ idx, text, color, fill });
+            };
+            addMarker(spot, 'ATM', '#eab308', '#1e1b10');
+            addMarker(callWall, 'Call Wall', '#34d399', '#022c22');
+            addMarker(putWall, 'Put Wall', '#fb7185', '#4c0519');
+            addMarker(flip, 'Gamma Flip', '#38bdf8', '#082f49');
+
+            const zonePlugin = {
+                id: 'gexZones',
+                beforeDatasetsDraw: (chart) => {
+                    const c = chart.ctx;
+                    const a = chart.chartArea;
+                    const xs = chart.scales.x;
+                    const first = strikes[0], last = strikes[strikes.length - 1];
+                    const px = (p, isFrom) => {
+                        if (isFrom && p <= first) return a.left;
+                        if (!isFrom && p >= last) return a.right;
+                        const fi = fracIndex(strikes, Math.min(Math.max(p, first), last));
+                        return xs.getPixelForValue(fi);
+                    };
+                    segments.forEach(z => {
+                        const x1 = Math.max(a.left, px(z.from, true));
+                        const x2 = Math.min(a.right, px(z.to, false));
+                        const w = x2 - x1;
+                        if (w <= 0) return;
+                        const pos = z.sign > 0;
+                        c.save();
+                        c.fillStyle = pos ? 'rgba(16,185,129,0.08)' : 'rgba(244,63,94,0.08)';
+                        c.fillRect(x1, a.top, w, a.bottom - a.top);
+                        if (w > 130) {
+                            c.font = '600 11px Prompt, sans-serif';
+                            c.fillStyle = pos ? 'rgba(52,211,153,0.85)' : 'rgba(251,113,133,0.85)';
+                            c.textAlign = 'center';
+                            c.textBaseline = 'top';
+                            c.fillText(pos ? 'Positive Gamma Zone' : 'Negative Gamma Zone', x1 + w / 2, a.top + 8);
+                        }
+                        c.restore();
+                    });
+                }
+            };
+
+            const markerPlugin = {
+                id: 'gexMarkers',
+                afterDraw: (chart) => {
+                    const c = chart.ctx;
+                    const top = chart.chartArea.top;
+                    const bottom = chart.chartArea.bottom;
+                    const xScale = chart.scales.x;
+
+                    const zeroY = chart.scales.y.getPixelForValue(0);
+                    c.save();
+                    c.beginPath();
+                    c.moveTo(chart.chartArea.left, zeroY);
+                    c.lineTo(chart.chartArea.right, zeroY);
+                    c.lineWidth = 1;
+                    c.strokeStyle = 'rgba(255,255,255,0.25)';
+                    c.stroke();
+                    c.restore();
+
+                    c.font = '600 11px Prompt, sans-serif';
+                    const items = markers
+                        .map(m => ({ m, x: xScale.getPixelForValue(m.idx), w: c.measureText(m.text).width + 18 }))
+                        .filter(o => o.x >= chart.chartArea.left && o.x <= chart.chartArea.right)
+                        .sort((p, q) => p.x - q.x);
+                    const rowEnd = [-1e9, -1e9, -1e9, -1e9];
+                    const bh = 20;
+                    items.forEach(o => {
+                        let row = rowEnd.findIndex(end => o.x - o.w / 2 > end + 4);
+                        if (row === -1) row = 0;
+                        rowEnd[row] = o.x + o.w / 2;
+                        const by = top - 92 + row * (bh + 4);
+                        c.save();
+                        c.setLineDash([4, 4]);
+                        c.beginPath();
+                        c.moveTo(o.x, by + bh);
+                        c.lineTo(o.x, bottom);
+                        c.lineWidth = 1.5;
+                        c.strokeStyle = o.m.color;
+                        c.stroke();
+                        c.setLineDash([]);
+                        c.font = '600 11px Prompt, sans-serif';
+                        c.fillStyle = o.m.fill;
+                        c.strokeStyle = o.m.color;
+                        c.lineWidth = 1;
+                        c.beginPath();
+                        c.roundRect(o.x - o.w / 2, by, o.w, bh, 6);
+                        c.fill();
+                        c.stroke();
+                        c.fillStyle = o.m.color;
+                        c.textAlign = 'center';
+                        c.textBaseline = 'middle';
+                        c.fillText(o.m.text, o.x, by + bh / 2 + 0.5);
+                        c.restore();
+                    });
+                }
+            };
+
+            const datasets = [];
+            if (!isAbs) {
+                datasets.push({
+                    type: 'line', label: 'Net GEX', data: netGex,
+                    borderColor: '#ffffff', backgroundColor: 'transparent',
+                    borderWidth: 2, pointRadius: 2, tension: 0.3, order: 0
+                });
+            }
+            datasets.push({
+                type: 'bar', label: 'Call GEX', data: callGex,
+                backgroundColor: '#10b981', borderRadius: 2,
+                barPercentage: 0.9, categoryPercentage: 0.9, order: 1
+            });
+            datasets.push({
+                type: 'bar', label: isAbs ? 'Put GEX (|Abs|)' : 'Put GEX',
+                data: isAbs ? putGex.map(v => Math.abs(v)) : putGex,
+                backgroundColor: '#f43f5e', borderRadius: 2,
+                barPercentage: 0.9, categoryPercentage: 0.9, order: 1
+            });
+
+            const config = {
+                type: 'bar',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: { padding: { top: 100, bottom: 5, left: 5, right: 12 } },
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.96)',
+                            titleColor: '#ffffff',
+                            titleFont: { size: 13, weight: '600', family: 'JetBrains Mono' },
+                            bodyFont: { size: 12, family: 'JetBrains Mono' },
+                            padding: 10, borderColor: '#334155', borderWidth: 1, cornerRadius: 8,
+                            callbacks: {
+                                title: (items) => `Strike: $${items[0].label}`,
+                                label: (item) => {
+                                    const v = item.parsed.y;
+                                    return `  ${item.dataset.label}: ${v < 0 ? '-' : ''}$${Math.abs(v).toFixed(2)}M`;
+                                },
+                                afterBody: (items) => {
+                                    const i = items[0].dataIndex;
+                                    return `\n  Net GEX: ${netGex[i] >= 0 ? '+' : '-'}$${Math.abs(netGex[i]).toFixed(2)}M\n  Total Abs: $${absGex[i].toFixed(2)}M`;
+                                }
+                            }
+                        },
+                        zoom: {
+                            pan: { enabled: true, mode: 'x' },
+                            zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            grid: { display: false },
+                            ticks: {
+                                color: '#cbd5e1', font: { size: 11, family: 'JetBrains Mono' },
+                                maxRotation: 0, minRotation: 0, autoSkip: true, autoSkipPadding: 10,
+                                callback: function (val) {
+                                    const s = strikes[val];
+                                    return s === undefined ? '' : (s / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+                                }
+                            }
+                        },
+                        y: {
+                            stacked: true,
+                            border: { dash: [3, 3] },
+                            grid: { color: 'rgba(51, 65, 85, 0.25)' },
+                            ticks: {
+                                color: '#94a3b8', font: { size: 11, family: 'JetBrains Mono' },
+                                callback: (v) => `${v}M`
+                            }
+                        }
+                    }
+                },
+                plugins: [zonePlugin, markerPlugin]
+            };
+
+            gexChartInstance = makeChartKeep(ctx, config, gexChartInstance, labels.join('|') + ':' + gexMode);
+        }
+
+        // ==========================================
+        // VOLATILITY SMILE & INTERPOLATED SKEW
+        // ==========================================
+        function interpolateSmileIv(dataPoints, targetStrike) {
+            if (!dataPoints || dataPoints.length === 0) return null;
+            if (targetStrike <= dataPoints[0].x) return dataPoints[0].y;
+            if (targetStrike >= dataPoints[dataPoints.length - 1].x) return dataPoints[dataPoints.length - 1].y;
+            for (let i = 0; i < dataPoints.length - 1; i++) {
+                const a = dataPoints[i], b = dataPoints[i + 1];
+                if (targetStrike >= a.x && targetStrike <= b.x) {
+                    const span = b.x - a.x;
+                    if (span <= 0) return a.y;
+                    return a.y + ((targetStrike - a.x) / span) * (b.y - a.y);
+                }
+            }
+            return null;
+        }
+
+        function updateSmileChart() {
+            const selectedExpiry = document.getElementById('smileExpirySelect').value;
+            if (!selectedExpiry || !rawDeribitOptions.length) return;
+
+            const spotPrice = getSpotPrice();
+            const expiryObj = availableExpiries.find(e => e.str === selectedExpiry);
+            let dte = 0;
+            if (expiryObj) {
+                const ms = expiryObj.date - new Date();
+                dte = Math.max(0, ms / 86400000);
+            }
+
+            const items = rawDeribitOptions.filter(i => i.instrument_name.split('-')[1] === selectedExpiry);
+            const fwd = parseFloat(items[0] && items[0].underlying_price) || spotPrice;
+
+            const strikeMap = {};
+            items.forEach(item => {
+                const parts = item.instrument_name.split('-');
+                if (parts.length >= 4) {
+                    const strike = parseInt(parts[2], 10);
+                    const type = parts[3];
+                    const iv = parseFloat(item.mark_iv) || 0;
+                    const oi = parseFloat(item.open_interest) || 0;
+                    const vol = parseFloat(item.volume) || 0;
+                    const hasQuote = (parseFloat(item.bid_price) > 0) || (parseFloat(item.ask_price) > 0);
+
+                    if (iv > 0 && (oi > 0 || vol > 0 || hasQuote)) {
+                        if (!strikeMap[strike]) strikeMap[strike] = { C: null, P: null, cOi: 0, pOi: 0 };
+                        strikeMap[strike][type] = iv;
+                        if (type === 'C') strikeMap[strike].cOi = oi;
+                        if (type === 'P') strikeMap[strike].pOi = oi;
+                    }
+                }
+            });
+
+            const dataPoints = [];
+            const strikes = Object.keys(strikeMap).map(Number).sort((a, b) => a - b);
+
+            let minDiff = Infinity;
+            let atmIvVal = 0;
+
+            strikes.forEach(strike => {
+                if (strike >= spotPrice * 0.68 && strike <= spotPrice * 1.32) {
+                    let finalIv = 0;
+                    let optType = 'ATM';
+
+                    const cIv = strikeMap[strike].C || 0;
+                    const pIv = strikeMap[strike].P || 0;
+
+                    if (Math.abs(strike - fwd) / fwd <= 0.008) {
+                        finalIv = (cIv && pIv) ? (cIv + pIv) / 2 : (cIv || pIv);
+                        optType = 'ATM';
+                    } else if (strike > fwd) {
+                        finalIv = cIv || pIv;
+                        optType = 'Call (OTM)';
+                    } else {
+                        finalIv = pIv || cIv;
+                        optType = 'Put (OTM)';
+                    }
+
+                    if (finalIv > 0 && finalIv < 250) {
+                        dataPoints.push({ x: strike, y: finalIv, optType });
+                        const diff = Math.abs(strike - fwd);
+                        if (diff < minDiff) {
+                            minDiff = diff;
+                            atmIvVal = finalIv;
+                        }
+                    }
+                }
+            });
+
+            // Interpolated Symmetric Skew Calculation
+            const reqSkewDist = parseFloat(document.getElementById('skewSelect').value) || 10;
+            let skewStr = '--';
+            let skewSubStr = `IV Put − IV Call (±${reqSkewDist}%)`;
+
+            if (dataPoints.length >= 3) {
+                const minStrike = dataPoints[0].x;
+                const maxStrike = dataPoints[dataPoints.length - 1].x;
+                const maxSymPct = Math.min(
+                    ((fwd - minStrike) / fwd) * 100,
+                    ((maxStrike - fwd) / fwd) * 100
+                );
+
+                const effectivePct = Math.min(reqSkewDist, Math.max(1, maxSymPct));
+                const lowerTarget = fwd * (1 - effectivePct / 100);
+                const upperTarget = fwd * (1 + effectivePct / 100);
+
+                const putIvInterp = interpolateSmileIv(dataPoints, lowerTarget);
+                const callIvInterp = interpolateSmileIv(dataPoints, upperTarget);
+
+                if (putIvInterp !== null && callIvInterp !== null) {
+                    const skewValue = putIvInterp - callIvInterp;
+                    let colorClass = 'text-slate-100';
+                    let sign = '';
+                    if (skewValue > 0.4) { colorClass = 'text-rose-400'; sign = '+'; }
+                    else if (skewValue < -0.4) { colorClass = 'text-emerald-400'; sign = ''; }
+
+                    skewStr = `<span class="${colorClass}">${sign}${skewValue.toFixed(2)}%</span>`;
+                    if (effectivePct < reqSkewDist - 0.5) {
+                        skewSubStr = `จำกัดตามช่วง Strike สูงสุด (±${effectivePct.toFixed(1)}%)`;
+                    } else {
+                        skewSubStr = `Put ${putIvInterp.toFixed(1)}% vs Call ${callIvInterp.toFixed(1)}%`;
+                    }
+                }
+            }
+
+            const sdSelectValue = document.getElementById('sdSelect').value;
+            const sdMults = sdSelectValue === 'ALL' ? [1.0, 1.5, 2.0] : [parseFloat(sdSelectValue)];
+
+            let em1sdVal = 0;
+            const effectiveDte = Math.max(dte, 1 / 96); // min 15m for 0DTE SD visualization
+            if (atmIvVal > 0) {
+                em1sdVal = spotPrice * (atmIvVal / 100) * Math.sqrt(effectiveDte / 365);
+            }
+
+            setText('smileSpotPrice', `$${Math.round(spotPrice).toLocaleString()}`);
+            setText('smileForwardSub', `Forward: $${Math.round(fwd).toLocaleString()}`);
+
+            if (dte < 1) {
+                const totalMins = Math.max(0, Math.round(dte * 24 * 60));
+                const hrs = Math.floor(totalMins / 60);
+                const mins = totalMins % 60;
+                setText('smileDte', `${hrs} ชม. ${mins} นาที`);
+                setText('smileDteSub', `${dte.toFixed(2)} วัน · หมดอายุ 15:00 น.`);
+            } else {
+                setText('smileDte', `${dte.toFixed(1)} วัน`);
+                setText('smileDteSub', `หมดอายุ 15:00 น. (เวลาไทย)`);
+            }
+
+            setText('smileAtmIv', `${atmIvVal.toFixed(1)}%`);
+            setText('smileAtmMoveSub', em1sdVal > 0 ? `±1SD: ±$${Math.round(em1sdVal).toLocaleString()} (±${((em1sdVal / spotPrice) * 100).toFixed(2)}%)` : '±1SD Move: --');
+            setHtml('smileSkew', skewStr);
+            setText('smileSkewSub', skewSubStr);
+
+            const sdBoundsContainer = document.getElementById('smileSdBoundsContainer');
+            const sdBoundsList = document.getElementById('smileSdBoundsList');
+
+            if (em1sdVal > 0) {
+                sdBoundsContainer.classList.remove('hidden');
+                sdBoundsContainer.classList.add('flex');
+            } else {
+                sdBoundsContainer.classList.add('hidden');
+                sdBoundsContainer.classList.remove('flex');
+            }
+
+            if (em1sdVal > 0 && sdSelectValue !== '0') {
+                const colorsClass = {
+                    1.0: { bg: 'bg-sky-500/10', border: 'border-sky-500/30', label: 'text-sky-300', val: 'text-sky-300', prob: '68.3%' },
+                    1.5: { bg: 'bg-yellow-500/10', border: 'border-yellow-500/30', label: 'text-yellow-300', val: 'text-yellow-300', prob: '86.6%' },
+                    2.0: { bg: 'bg-rose-500/10', border: 'border-rose-500/30', label: 'text-rose-300', val: 'text-rose-300', prob: '95.5%' }
+                };
+                const displayMults = sdSelectValue === 'ALL' ? [1.0, 1.5, 2.0] : [parseFloat(sdSelectValue)];
+                let badgesHtml = '';
+                displayMults.forEach(mult => {
+                    const emVal = em1sdVal * mult;
+                    const lowerPrice = Math.max(0, Math.round(spotPrice - emVal)).toLocaleString();
+                    const upperPrice = Math.round(spotPrice + emVal).toLocaleString();
+                    const c = colorsClass[mult] || colorsClass[1.0];
+                    badgesHtml += `
+                        <div class="flex items-center justify-between gap-3 px-3.5 py-2 rounded-lg ${c.bg} border ${c.border}">
+                            <div class="flex flex-col">
+                                <span class="text-xs sm:text-sm font-semibold ${c.label}">±${mult.toFixed(1)} SD</span>
+                                <span class="text-[11px] text-slate-400">ความน่าจะเป็น ${c.prob}</span>
+                            </div>
+                            <span class="text-xs sm:text-sm font-bold font-mono ${c.val} whitespace-nowrap">$${lowerPrice} – $${upperPrice}</span>
+                        </div>`;
+                });
+                sdBoundsList.innerHTML = badgesHtml;
+            } else {
+                sdBoundsList.innerHTML = '<div class="text-xs sm:text-sm text-slate-400 sm:col-span-3">ปิดการแสดงกรอบ SD บนกราฟ</div>';
+            }
+
+            const ctx = document.getElementById('smileChart').getContext('2d');
+
+            const advancedSmilePlugin = {
+                id: 'advancedSmilePlugin',
+                beforeDraw: (chart) => {
+                    const ctx = chart.ctx;
+                    const xAxis = chart.scales.x;
+                    const yAxis = chart.scales.y;
+                    const topY = yAxis.top;
+                    const bottomY = yAxis.bottom;
+
+                    if (spotPrice >= xAxis.min && spotPrice <= xAxis.max) {
+                        if (em1sdVal > 0 && sdSelectValue !== '0') {
+                            const colors = {
+                                1.0: { bg: 'rgba(56, 189, 248, 0.05)', border: 'rgba(56, 189, 248, 0.35)' },
+                                1.5: { bg: 'rgba(250, 204, 21, 0.04)', border: 'rgba(250, 204, 21, 0.35)' },
+                                2.0: { bg: 'rgba(244, 63, 94, 0.04)', border: 'rgba(244, 63, 94, 0.35)' }
+                            };
+
+                            const sortedMults = [...sdMults].sort((a, b) => b - a);
+                            sortedMults.forEach(mult => {
+                                if (mult === 0 || isNaN(mult)) return;
+                                const emVal = em1sdVal * mult;
+                                const lowerPrice = spotPrice - emVal;
+                                const upperPrice = spotPrice + emVal;
+
+                                const safeMin = Math.max(xAxis.min, lowerPrice);
+                                const safeMax = Math.min(xAxis.max, upperPrice);
+
+                                const lowerX = xAxis.getPixelForValue(safeMin);
+                                const upperX = xAxis.getPixelForValue(safeMax);
+                                const c = colors[mult] || colors[1.0];
+
+                                ctx.save();
+                                ctx.fillStyle = c.bg;
+                                ctx.fillRect(lowerX, topY, upperX - lowerX, bottomY - topY);
+                                ctx.strokeStyle = c.border;
+                                ctx.lineWidth = 1;
+                                ctx.setLineDash([3, 3]);
+                                ctx.beginPath();
+                                if (lowerPrice >= xAxis.min && lowerPrice <= xAxis.max) {
+                                    ctx.moveTo(lowerX, topY); ctx.lineTo(lowerX, bottomY);
+                                }
+                                if (upperPrice >= xAxis.min && upperPrice <= xAxis.max) {
+                                    ctx.moveTo(upperX, topY); ctx.lineTo(upperX, bottomY);
+                                }
+                                ctx.stroke();
+                                ctx.restore();
+                            });
+                        }
+
+                        const x = xAxis.getPixelForValue(spotPrice);
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.setLineDash([4, 4]);
+                        ctx.moveTo(x, topY + 26);
+                        ctx.lineTo(x, bottomY);
+                        ctx.lineWidth = 1.5;
+                        ctx.strokeStyle = '#eab308';
+                        ctx.stroke();
+
+                        ctx.setLineDash([]);
+                        ctx.fillStyle = '#1e1b10';
+                        ctx.strokeStyle = '#eab308';
+                        ctx.lineWidth = 1;
+                        const badgeWidth = 44, badgeHeight = 20;
+                        ctx.beginPath();
+                        ctx.roundRect(x - badgeWidth / 2, topY + 26 - badgeHeight, badgeWidth, badgeHeight, 6);
+                        ctx.fill();
+                        ctx.stroke();
+
+                        ctx.fillStyle = '#facc15';
+                        ctx.font = '600 11px JetBrains Mono, monospace';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText('ATM', x, topY + 26 - badgeHeight / 2 + 0.5);
+                        ctx.restore();
+                    }
+                }
+            };
+
+            const pointColors = dataPoints.map(pt =>
+                pt.optType === 'Put (OTM)' ? '#fb7185' : (pt.optType === 'ATM' ? '#fbbf24' : '#38bdf8')
+            );
+
+            const chartConfig = {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        label: `IV %`,
+                        data: dataPoints,
+                        borderColor: '#38bdf8',
+                        backgroundColor: 'rgba(56, 189, 248, 0.10)',
+                        borderWidth: 2.5,
+                        pointBackgroundColor: pointColors,
+                        pointBorderColor: '#090d16',
+                        pointBorderWidth: 1.5,
+                        pointRadius: 4.5,
+                        pointHoverRadius: 7,
+                        fill: true,
+                        tension: 0.35,
+                        segment: {
+                            borderColor: ctxSeg => {
+                                const xVal = ctxSeg.p0.parsed.x;
+                                return xVal < fwd ? '#fb7185' : '#38bdf8';
+                            }
+                        }
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: { padding: { top: 32, bottom: 5, left: 5, right: 12 } },
+                    interaction: { mode: 'nearest', axis: 'x', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.96)',
+                            titleColor: '#ffffff', titleFont: { size: 13, weight: '600', family: 'JetBrains Mono' },
+                            bodyFont: { size: 12, family: 'JetBrains Mono' },
+                            padding: 12, borderColor: '#334155', borderWidth: 1, cornerRadius: 8,
+                            displayColors: false,
+                            callbacks: {
+                                title: (context) => `Strike: $${context[0].parsed.x.toLocaleString()}`,
+                                label: (context) => {
+                                    const pt = context.raw;
+                                    const mness = (((pt.x - fwd) / fwd) * 100).toFixed(1);
+                                    return [
+                                        `Implied Vol: ${pt.y.toFixed(2)}%`,
+                                        `Type: ${pt.optType} (${mness >= 0 ? '+' : ''}${mness}%)`
+                                    ];
+                                }
+                            }
+                        },
+                        zoom: {
+                            pan: { enabled: true, mode: 'x' },
+                            zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            grid: { display: false },
+                            ticks: {
+                                color: '#cbd5e1', font: { size: 11, family: 'JetBrains Mono' },
+                                padding: 8,
+                                maxRotation: 0, autoSkip: true, autoSkipPadding: 12,
+                                callback: function (value) { return (value / 1000).toFixed(1).replace(/\.0$/, '') + 'k'; }
+                            }
+                        },
+                        y: {
+                            border: { dash: [3, 3] },
+                            grid: { color: 'rgba(51, 65, 85, 0.35)' },
+                            ticks: {
+                                color: '#94a3b8', font: { size: 11, family: 'JetBrains Mono' },
+                                padding: 8,
+                                callback: function (value) { return value + '%'; }
+                            }
+                        }
+                    }
+                },
+                plugins: [advancedSmilePlugin]
+            };
+
+            smileChartInstance = makeChartKeep(ctx, chartConfig, smileChartInstance, selectedExpiry);
+        }
+
+        // ==========================================
+        // OI & VOLUME BAR CHARTS BUILDER
+        // ==========================================
+        function buildChart(canvasId, labels, callData, putData, callLabel, putLabel, atmIndex, maxPainIndex) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+
+            const indicatorsPlugin = {
+                id: 'indicatorsPlugin',
+                afterDraw: (chart) => {
+                    const ctx = chart.ctx;
+                    const topY = chart.chartArea.top;
+                    const bottomY = chart.chartArea.bottom;
+                    const meta = chart.getDatasetMeta(0);
+
+                    if (maxPainIndex !== undefined && maxPainIndex >= 0 && maxPainIndex < labels.length && meta.data[maxPainIndex]) {
+                        const mpX = meta.data[maxPainIndex].x;
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.setLineDash([4, 4]);
+                        ctx.moveTo(mpX, topY + 14);
+                        ctx.lineTo(mpX, bottomY);
+                        ctx.lineWidth = 1.5;
+                        ctx.strokeStyle = '#c084fc';
+                        ctx.stroke();
+                        const badgeWidth = 58;
+                        const badgeHeight = 16;
+                        const badgeX = mpX - badgeWidth / 2;
+                        const badgeY = (Math.abs(maxPainIndex - atmIndex) <= 1) ? topY + 16 : topY - 2;
+                        ctx.setLineDash([]);
+                        ctx.fillStyle = '#2e1065';
+                        ctx.strokeStyle = '#c084fc';
+                        ctx.lineWidth = 1;
+                        ctx.beginPath();
+                        ctx.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 4);
+                        ctx.fill();
+                        ctx.stroke();
+                        ctx.fillStyle = '#e9d5ff';
+                        ctx.font = 'bold 9px JetBrains Mono, monospace';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText('Max Pain', mpX, badgeY + badgeHeight / 2);
+                        ctx.restore();
+                    }
+
+                    if (atmIndex >= 0 && atmIndex < labels.length && meta.data[atmIndex]) {
+                        const atmX = meta.data[atmIndex].x;
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.setLineDash([4, 4]);
+                        ctx.moveTo(atmX, topY + 14);
+                        ctx.lineTo(atmX, bottomY);
+                        ctx.lineWidth = 1.5;
+                        ctx.strokeStyle = '#eab308';
+                        ctx.stroke();
+                        const badgeWidth = 34;
+                        const badgeHeight = 16;
+                        const badgeX = atmX - badgeWidth / 2;
+                        const badgeY = topY - 2;
+                        ctx.setLineDash([]);
+                        ctx.fillStyle = '#1e1b10';
+                        ctx.strokeStyle = '#eab308';
+                        ctx.lineWidth = 1;
+                        ctx.beginPath();
+                        ctx.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 4);
+                        ctx.fill();
+                        ctx.stroke();
+                        ctx.fillStyle = '#facc15';
+                        ctx.font = 'bold 9px JetBrains Mono, monospace';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText('ATM', atmX, badgeY + badgeHeight / 2);
+                        ctx.restore();
+                    }
+                }
+            };
+
+            const chartConfig = {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: callLabel,
+                            data: callData,
+                            backgroundColor: '#10b981',
+                            borderRadius: 2,
+                            barPercentage: 0.82,
+                            categoryPercentage: 0.82
+                        },
+                        {
+                            label: putLabel,
+                            data: putData,
+                            backgroundColor: '#f43f5e',
+                            borderRadius: 2,
+                            barPercentage: 0.82,
+                            categoryPercentage: 0.82
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: { padding: { top: 36, bottom: 5, left: 5, right: 5 } },
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            enabled: true,
+                            backgroundColor: 'rgba(15, 23, 42, 0.96)',
+                            titleColor: '#ffffff',
+                            titleFont: { size: 13, weight: 'bold', family: 'JetBrains Mono' },
+                            bodyFont: { size: 12, family: 'JetBrains Mono' },
+                            padding: 10,
+                            borderColor: '#334155',
+                            borderWidth: 1,
+                            cornerRadius: 8,
+                            displayColors: true,
+                            callbacks: {
+                                title: (context) => `Strike: $${context[0].label}`,
+                                label: (context) => {
+                                    const val = context.parsed.y !== null ? context.parsed.y.toFixed(1) : '0';
+                                    return `  ${context.dataset.label}: ${val} BTC`;
+                                },
+                                afterBody: (context) => {
+                                    const callVal = context[0]?.parsed.y || 0;
+                                    const putVal = context[1]?.parsed.y || 0;
+                                    const total = callVal + putVal;
+                                    const pcr = callVal > 0 ? (putVal / callVal).toFixed(2) : '--';
+                                    return `\nTotal: ${total.toFixed(1)} BTC  (PCR: ${pcr})`;
+                                }
+                            }
+                        },
+                        zoom: {
+                            pan: { enabled: true, mode: 'x' },
+                            zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#94a3b8', font: { size: 9, family: 'JetBrains Mono' }, maxRotation: 45, minRotation: 45 }
+                        },
+                        y: {
+                            border: { dash: [3, 3] },
+                            grid: { color: 'rgba(51, 65, 85, 0.3)' },
+                            ticks: { color: '#64748b', font: { size: 9, family: 'JetBrains Mono' } }
+                        }
+                    }
+                },
+                plugins: [indicatorsPlugin]
+            };
+
+            const zoomKey = labels.join('|');
+            if (canvasId === 'oiChart') oiChartInstance = makeChartKeep(ctx, chartConfig, oiChartInstance, zoomKey);
+            else volChartInstance = makeChartKeep(ctx, chartConfig, volChartInstance, zoomKey);
+        }
+
+        // --- Chart Zoom & Fullscreen Controls ---
+        function zoomChart(chartId, factor) {
+            const map = { oiChart: oiChartInstance, volChart: volChartInstance, gexChart: gexChartInstance, smileChart: smileChartInstance };
+            if (map[chartId]) map[chartId].zoom(factor);
+        }
+
+        function resetChartZoom(chartId) {
+            const map = { oiChart: oiChartInstance, volChart: volChartInstance, gexChart: gexChartInstance, smileChart: smileChartInstance };
+            if (map[chartId]) map[chartId].resetZoom();
+        }
+
+        function resizeAllCharts() {
+            setTimeout(() => {
+                [oiChartInstance, volChartInstance, gexChartInstance, smileChartInstance].forEach(c => {
+                    if (c) c.resize();
+                });
+            }, 80);
+        }
+
+        function toggleFullscreen(elementId) {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+            el.classList.toggle('chart-fullscreen');
+            resizeAllCharts();
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                ['cardOi', 'cardVol', 'cardGex', 'cardSmile'].forEach(id => {
+                    document.getElementById(id)?.classList.remove('chart-fullscreen');
+                });
+                resizeAllCharts();
+            }
+        });
+
+        // ==========================================
+        // BINANCE FUTURES DAILY OPEN & DERIBIT DVOL
+        // ==========================================
         async function fetchMarketData() {
             displayCurrentDate();
-            updateStatus('loading', 'กำลังเชื่อมต่อและดึงข้อมูลตลาด...');
+            updateStatus('loading', 'กำลังเชื่อมต่อและดึงข้อมูลตลาดเรียลไทม์...');
+            const problems = [];
 
-            let binanceSuccess = false;
-            let dvolSuccess = false;
-
-            // 1. ดึง Binance Open Price & Current Spot Price
-            try {
-                const res = await fetchWithTimeout('https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1d&limit=1', {}, 4000);
-                const data = await res.json();
-                if(data && data.length > 0) {
-                    latestDailyOpen = parseFloat(data[0][1]);
-                    document.getElementById('openPrice').value = latestDailyOpen.toFixed(2);
-                    binanceSuccess = true;
-                }
-
-                const priceRes = await fetchWithTimeout('https://fapi.binance.com/fapi/v1/ticker/price?symbol=BTCUSDT', {}, 3000);
-                const priceData = await priceRes.json();
-                if(priceData && priceData.price) {
-                    currentSpotForBar = parseFloat(priceData.price);
-                }
-            } catch (e) {
-                try {
-                    const proxyUrl = "https://api.allorigins.win/raw?url=" + encodeURIComponent('https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1d&limit=1');
-                    const proxyRes = await fetchWithTimeout(proxyUrl, {}, 4000);
-                    const proxyData = await proxyRes.json();
-                    if(proxyData && proxyData.length > 0) {
-                        latestDailyOpen = parseFloat(proxyData[0][1]);
-                        document.getElementById('openPrice').value = latestDailyOpen.toFixed(2);
-                        currentSpotForBar = latestDailyOpen;
-                        binanceSuccess = true;
-                    }
-                } catch (err) {
-                    console.warn("Binance fallback used");
-                }
-            }
-
-            if (!binanceSuccess) {
-                document.getElementById('openPrice').value = latestDailyOpen;
-            }
-
-            // 2. ดึงประวัติ DVOL ย้อนหลัง 1 ปี (แก้ไข Bug: ใช้ resolution=86400)
-            const now = Date.now();
-            const oneYearAgo = now - (365 * 24 * 60 * 60 * 1000);
-            const dvolApiUrl = `https://www.deribit.com/api/v2/public/get_volatility_index_data?currency=BTC&resolution=86400&start_timestamp=${oneYearAgo}&end_timestamp=${now}`;
-
-            try {
-                let dvolRes;
-                try {
-                    dvolRes = await fetchWithTimeout(dvolApiUrl, {}, 5000);
-                } catch (err) {
-                    const proxyDvolUrl = "https://api.allorigins.win/raw?url=" + encodeURIComponent(dvolApiUrl);
-                    dvolRes = await fetchWithTimeout(proxyDvolUrl, {}, 5000);
-                }
-
-                const dvolData = await dvolRes.json();
-                if (dvolData?.result?.data && dvolData.result.data.length > 0) {
-                    historical1YDvol = dvolData.result.data.map(item => parseFloat(item[4])).filter(v => !isNaN(v));
-                    const latestDvol = historical1YDvol[historical1YDvol.length - 1];
-                    document.getElementById('dvolValue').value = latestDvol.toFixed(2);
-                    dvolSuccess = true;
-                }
-            } catch (e) {
-                console.warn("Failed fetching 1Y DVOL data:", e);
-            }
-
-            if (!dvolSuccess) {
-                document.getElementById('dvolValue').value = defaultDvol;
-            }
-
-            if (binanceSuccess && dvolSuccess) {
-                updateStatus('success', '✅ เชื่อมต่อและดึงข้อมูลตลาดเรียลไทม์สำเร็จ');
+            // 1) Daily Open (00:00 UTC): Binance Futures -> Deribit BTC-PERPETUAL fallback
+            let openOk = false;
+            const kl = await fetchJsonWithProxy('https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1d&limit=1', 5000, false);
+            if (Array.isArray(kl) && kl.length > 0 && parseFloat(kl[0][1]) > 0) {
+                latestDailyOpen = parseFloat(kl[0][1]);
+                openOk = true;
             } else {
-                updateStatus('warning', '⚠️ การเชื่อมต่อบางส่วนขัดข้อง ระบบใช้ค่าสำรองล่าสุด (สามารถพิมพ์แก้ไขเองได้)');
+                const n = new Date();
+                const dayStart = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate());
+                const tvUrl = `https://www.deribit.com/api/v2/public/get_tradingview_chart_data?instrument_name=BTC-PERPETUAL&start_timestamp=${dayStart}&end_timestamp=${Date.now()}&resolution=1D`;
+                const tv = await fetchJsonWithProxy(tvUrl, 6000);
+                const r = tv && tv.result;
+                if (r && Array.isArray(r.open) && r.open.length > 0) {
+                    let i = Array.isArray(r.ticks) ? r.ticks.findIndex(t => t >= dayStart) : 0;
+                    if (i < 0) i = r.open.length - 1;
+                    const v = parseFloat(r.open[i]);
+                    if (v > 0) { latestDailyOpen = v; openOk = true; }
+                }
             }
+            const openInput = document.getElementById('openPrice');
+            if (openOk) openInput.value = latestDailyOpen.toFixed(2);
+            else problems.push('ราคาเปิดประจำวัน');
 
+            // 2) Live Spot Price
+            const spotOk = await refreshSpotPriceOnly();
+            if (!spotOk) problems.push('ราคา Spot');
+            if (!openOk && !openInput.value && currentSpotForBar > 0) openInput.value = currentSpotForBar.toFixed(2);
+
+            // 3) DVOL 1-Year Daily History
+            let dvolOk = false;
+            const now = Date.now();
+            const oneYearAgo = now - (365 * 86400000);
+            for (const res of ['1D', '86400']) {
+                const url = `https://www.deribit.com/api/v2/public/get_volatility_index_data?currency=BTC&resolution=${res}&start_timestamp=${oneYearAgo}&end_timestamp=${now}`;
+                const dv = await fetchJsonWithProxy(url, 8000);
+                const rows = dv && dv.result && dv.result.data;
+                if (Array.isArray(rows) && rows.length > 0) {
+                    const closes = rows.map(item => parseFloat(item[4])).filter(v => v > 0);
+                    if (closes.length > 0) {
+                        historical1YDvol = closes;
+                        document.getElementById('dvolValue').value = closes[closes.length - 1].toFixed(2);
+                        dvolOk = true;
+                        break;
+                    }
+                }
+            }
+            if (!dvolOk) problems.push('DVOL');
+
+            // 4) VIX + Deribit Options Chain in parallel
+            await Promise.allSettled([fetchVixData(), fetchDeribitOptionsData()]);
+            if (rawDeribitOptions.length === 0) problems.push('Options Deribit');
+
+            if (problems.length === 0) {
+                updateStatus('success', '✅ เชื่อมต่อและดึงข้อมูลตลาดเรียลไทม์สำเร็จครบทุกแหล่ง');
+            } else {
+                updateStatus('warning', `⚠️ ดึงข้อมูลบางส่วนไม่สำเร็จ (${problems.join(', ')}) — สามารถระบุค่าเองได้`);
+            }
+            updateHeaderSpotBadge();
             calculateMove();
         }
 
         function calculateIVRankAndPercentile(currentDvol) {
-            // กรณีดึงข้อมูลล้มเหลวหรือไม่พบประวัติ (แก้ไข Bug)
-            if (!historical1YDvol || historical1YDvol.length === 0) {
-                document.getElementById('ivRankVal').innerText = "N/A";
-                document.getElementById('ivPctVal').innerText = "N/A";
+            if (!historical1YDvol || historical1YDvol.length === 0 || !(currentDvol > 0)) {
+                setText('ivRankVal', "N/A");
+                setText('ivPctVal', "N/A");
+                setText('ivRankTag', "--");
+                setText('ivPctTag', "--");
                 document.getElementById('ivRankBar').style.width = `0%`;
                 document.getElementById('ivPctBar').style.width = `0%`;
                 return;
             }
-
             const minDvol = Math.min(...historical1YDvol);
             const maxDvol = Math.max(...historical1YDvol);
-
             let ivRank = 0;
-            if (maxDvol > minDvol) {
-                ivRank = ((currentDvol - minDvol) / (maxDvol - minDvol)) * 100;
-            }
+            if (maxDvol > minDvol) ivRank = ((currentDvol - minDvol) / (maxDvol - minDvol)) * 100;
             ivRank = Math.max(0, Math.min(100, ivRank));
-
             const countLower = historical1YDvol.filter(d => d < currentDvol).length;
             const ivPercentile = (countLower / historical1YDvol.length) * 100;
 
-            document.getElementById('ivRankVal').innerText = ivRank.toFixed(1);
+            setText('ivRankVal', `${ivRank.toFixed(1)}%`);
             document.getElementById('ivRankBar').style.width = `${ivRank}%`;
+            setText('ivRankTag', ivRank >= 50 ? 'HIGH' : 'LOW');
+            setText('ivRankSub', `1Y Low: ${minDvol.toFixed(1)}% · High: ${maxDvol.toFixed(1)}%`);
 
-            document.getElementById('ivPctVal').innerText = ivPercentile.toFixed(1);
+            setText('ivPctVal', `${ivPercentile.toFixed(1)}%`);
             document.getElementById('ivPctBar').style.width = `${ivPercentile}%`;
+            setText('ivPctTag', `${countLower}/${historical1YDvol.length} วัน`);
         }
 
         function calculateMove() {
-            let openPrice = parseFloat(document.getElementById('openPrice').value);
-            let dvol = parseFloat(document.getElementById('dvolValue').value);
-
-            if (isNaN(openPrice)) openPrice = latestDailyOpen;
-            if (isNaN(dvol)) dvol = defaultDvol;
+            const openPrice = parseFloat(document.getElementById('openPrice').value);
+            const dvol = parseFloat(document.getElementById('dvolValue').value);
+            if (!(openPrice > 0) || !(dvol > 0)) {
+                setText('displayCenterPrice', '-');
+                setText('displayDaily1SdPct', '-');
+                setText('displayCurrentSpot', '-');
+                setHtml('sdTableBody', '<tr><td colspan="5" class="p-4 text-center text-xs text-slate-400">กรอกราคาเปิดและค่า DVOL เพื่อคำนวณกรอบราคา</td></tr>');
+                calculateIVRankAndPercentile(NaN);
+                return;
+            }
 
             calculateIVRankAndPercentile(dvol);
-
-            const currentPrice = currentSpotForBar > 0 ? currentSpotForBar : openPrice;
-            document.getElementById('displayCenterPrice').innerText = `$${openPrice.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            const currentPrice = getSpotPrice() || openPrice;
+            updateHeaderSpotBadge();
 
             const dailyVolPct1SD = (dvol / 100) / Math.sqrt(365);
-            
+            const daily1SdUsd = openPrice * dailyVolPct1SD;
+
+            setText('displayCenterPrice', `$${openPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+            setText('displayDaily1SdPct', `±${(dailyVolPct1SD * 100).toFixed(2)}% ($${Math.round(daily1SdUsd).toLocaleString()})`);
+            setText('displayCurrentSpot', `$${currentPrice.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`);
+
             const levels = [
+                { sd: "± 0.5 SD", mult: 0.5, prob: "38.29%", bg: "bg-slate-900/40" },
                 { sd: "± 1.0 SD", mult: 1.0, prob: "68.27%", bg: "bg-amber-950/20" },
                 { sd: "± 1.5 SD", mult: 1.5, prob: "86.64%", bg: "bg-slate-800/40" },
                 { sd: "± 2.0 SD", mult: 2.0, prob: "95.45%", bg: "bg-emerald-950/20" }
             ];
 
             let tableHtml = "";
-            let bounds = {};
-
+            const bounds = {};
             levels.forEach(lvl => {
                 const movePct = dailyVolPct1SD * lvl.mult;
                 const moveAmount = openPrice * movePct;
                 const lower = openPrice - moveAmount;
                 const upper = openPrice + moveAmount;
-
                 bounds[lvl.mult] = { lower, upper };
-
                 tableHtml += `
-                    <tr class="${lvl.bg} hover:bg-slate-800/60 transition">
-                        <td class="p-3 text-center font-bold text-amber-400">${lvl.sd}</td>
-                        <td class="p-3 text-right text-rose-300 font-medium">$${lower.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                        <td class="p-3 text-center text-amber-200/90 font-mono text-xs">± ${(movePct * 100).toFixed(2)}%</td>
-                        <td class="p-3 text-center text-slate-400 text-xs">${lvl.prob}</td>
-                        <td class="p-3 text-left text-emerald-300 font-medium">$${upper.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                    </tr>
-                `;
+                    <tr class="${lvl.bg} hover:bg-slate-800/70 transition">
+                        <td class="py-2.5 px-3 text-center font-bold text-amber-400 whitespace-nowrap">${lvl.sd}</td>
+                        <td class="py-2.5 px-3 text-right text-rose-300 font-semibold whitespace-nowrap">$${lower.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td class="py-2.5 px-2 text-center text-amber-200/90 text-xs whitespace-nowrap">±${(movePct * 100).toFixed(2)}%</td>
+                        <td class="py-2.5 px-2 text-center text-slate-400 text-xs whitespace-nowrap">${lvl.prob}</td>
+                        <td class="py-2.5 px-3 text-left text-emerald-300 font-semibold whitespace-nowrap">$${upper.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    </tr>`;
             });
+            setHtml('sdTableBody', tableHtml);
 
-            document.getElementById('sdTableBody').innerHTML = tableHtml;
+            latestSummaryCache.spot = currentPrice;
+            latestSummaryCache.open = openPrice;
+            latestSummaryCache.dvol = dvol;
+            latestSummaryCache.sdBounds = bounds;
 
             function updateBar(mult, dotId, lowLblId, uppLblId, posLblId) {
                 const low = bounds[mult].lower;
                 const upp = bounds[mult].upper;
                 const range = upp - low;
                 let pct = ((currentPrice - low) / range) * 100;
-                
                 let statusMsg = `${pct.toFixed(1)}%`;
-                if (pct < 0) statusMsg = `ต่ำกว่า -${mult}SD!`;
-                if (pct > 100) statusMsg = `ทะลุ +${mult}SD!`;
-
-                pct = Math.max(0, Math.min(100, pct));
-
-                document.getElementById(dotId).style.left = `${pct}%`;
-                document.getElementById(lowLblId).innerText = `-${mult}SD ($${low.toLocaleString('en-US', {maximumFractionDigits: 0})})`;
-                document.getElementById(uppLblId).innerText = `+${mult}SD ($${upp.toLocaleString('en-US', {maximumFractionDigits: 0})})`;
-                document.getElementById(posLblId).innerText = `ตำแหน่ง: ${statusMsg} (Spot: $${currentPrice.toLocaleString()})`;
+                if (pct < 0) statusMsg = `หลุดกรอบ -${mult.toFixed(1)}SD! (${pct.toFixed(0)}%)`;
+                if (pct > 100) statusMsg = `ทะลุกรอบ +${mult.toFixed(1)}SD! (${pct.toFixed(0)}%)`;
+                const clampedPct = Math.max(0, Math.min(100, pct));
+                document.getElementById(dotId).style.left = `${clampedPct}%`;
+                setText(lowLblId, `-${mult.toFixed(1)}SD ($${Math.round(low).toLocaleString()})`);
+                setText(uppLblId, `+${mult.toFixed(1)}SD ($${Math.round(upp).toLocaleString()})`);
+                setText(posLblId, `ตำแหน่ง: ${statusMsg}`);
             }
 
             updateBar(1.0, 'dot1sd', 'label1SdLower', 'label1SdUpper', 'pos1sd');
             updateBar(1.5, 'dot15sd', 'label15SdLower', 'label15SdUpper', 'pos15sd');
             updateBar(2.0, 'dot2sd', 'label2SdLower', 'label2SdUpper', 'pos2sd');
-
-            document.getElementById('resultSection').classList.remove('hidden');
         }
 
-        // ฟังก์ชันแคปเจอร์หน้าจอและดาวน์โหลดเป็นภาพ PNG
-        async function saveAsImage() {
-            const btn = document.getElementById('saveImgBtn');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '⏳ กำลังบันทึกรูปภาพ...';
-            btn.disabled = true;
+        // Copy all key levels to clipboard for TradingView / ATAS / Discord notes
+        async function copySummaryLevels() {
+            const c = latestSummaryCache;
+            if (!(c.open > 0)) return;
+            const fmt = n => n ? `$${Math.round(n).toLocaleString()}` : 'N/A';
+            const b = c.sdBounds;
+            const lines = [
+                `📊 BTC Daily Quant Levels (${new Date().toLocaleDateString('th-TH')})`,
+                `• Spot: ${fmt(c.spot)} | Daily Open: ${fmt(c.open)} | DVOL: ${c.dvol.toFixed(2)}%`,
+                `• ±0.5 SD: ${fmt(b[0.5]?.lower)} – ${fmt(b[0.5]?.upper)}`,
+                `• ±1.0 SD: ${fmt(b[1.0]?.lower)} – ${fmt(b[1.0]?.upper)}`,
+                `• ±1.5 SD: ${fmt(b[1.5]?.lower)} – ${fmt(b[1.5]?.upper)}`,
+                `• ±2.0 SD: ${fmt(b[2.0]?.lower)} – ${fmt(b[2.0]?.upper)}`,
+                `• Call Wall: ${fmt(c.callWall)} | Put Wall: ${fmt(c.putWall)}`,
+                `• Gamma Flip: ${fmt(c.gammaFlip)} | Max Pain: ${fmt(c.maxPain)}`
+            ].join('\n');
 
             try {
-                // แก้ไข Bug: เลื่อนจอกลับไปบนสุดเพื่อป้องกันภาพแหว่ง
-                window.scrollTo({ top: 0, behavior: 'instant' }); 
-                
-                const captureElement = document.getElementById('captureArea');
-                const canvas = await html2canvas(captureElement, {
-                    scale: 2, 
-                    backgroundColor: '#020617', 
-                    useCORS: true,
-                    scrollY: 0, // บังคับแกน Y ให้ไม่ถูกตัดเมื่อเลื่อนจอ
-                    logging: false
-                });
-
-                const link = document.createElement('a');
-                const now = new Date();
-                const dateStr = now.toISOString().slice(0, 10);
-                link.download = `BTC_Expected_Move_${dateStr}.png`;
-                link.href = canvas.toDataURL('image/png');
-                link.click();
-            } catch (err) {
-                console.error("Capture failed:", err);
-                alert("ไม่สามารถบันทึกภาพได้ กรุณาลองใหม่อีกครั้ง");
-            } finally {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
+                await navigator.clipboard.writeText(lines);
+                setText('copyBtnText', 'คัดลอกแล้ว!');
+                setTimeout(() => setText('copyBtnText', 'คัดลอกราคา'), 2000);
+            } catch (e) {
+                setText('copyBtnText', 'ไม่สำเร็จ');
+                setTimeout(() => setText('copyBtnText', 'คัดลอกราคา'), 2000);
             }
         }
 
-        window.onload = fetchMarketData;
+        // ==========================================
+        // TIMERS & INITIALIZATION
+        // ==========================================
+        let refreshSecondsLeft = 60;
+        let refreshTimerInterval = null;
+
+        function startAutoRefreshTimer() {
+            if (refreshTimerInterval) clearInterval(refreshTimerInterval);
+            refreshSecondsLeft = 60;
+            updateCountdownUI();
+            refreshTimerInterval = setInterval(async () => {
+                displayCurrentDate();
+                refreshSecondsLeft--;
+                if (refreshSecondsLeft <= 0) {
+                    refreshSecondsLeft = 60;
+                    try {
+                        await refreshSpotPriceOnly();
+                        await fetchDeribitOptionsData();
+                        await fetchVixData();
+                    } catch (err) {
+                        console.warn('Auto refresh failed:', err);
+                    }
+                }
+                updateCountdownUI();
+            }, 1000);
+        }
+
+        function updateCountdownUI() {
+            setText('autoRefreshCountdown', `${refreshSecondsLeft}s`);
+            setText('smileRefreshTimer', `${refreshSecondsLeft}s`);
+        }
+
+        async function manualRefreshOptions() {
+            refreshSecondsLeft = 60;
+            updateCountdownUI();
+            displayCurrentDate();
+            await refreshSpotPriceOnly();
+            await fetchDeribitOptionsData();
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            displayCurrentDate();
+            fetchMarketData();
+            startAutoRefreshTimer();
+        });
     </script>
 </body>
 </html>
